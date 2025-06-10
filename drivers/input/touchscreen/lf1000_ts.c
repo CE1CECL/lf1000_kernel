@@ -136,7 +136,7 @@ static int abs_y[3] = {TS_MIN_Y, TS_MAX_Y, TS_FUZZ_Y};
 module_param_array(abs_y, int, NULL, 0);
 MODULE_PARM_DESC(abs_y, "Touchscreen absolute Y min, max, fuzz");
 
-struct touch {
+static struct touch {
 	struct input_dev	*i_dev;
 
 	struct task_struct	*ts_task;
@@ -263,7 +263,7 @@ struct touch {
 	int	major;
 } touch_dev;
 
-struct touch * t_dev = &touch_dev;
+static struct touch * t_dev = &touch_dev;
 
 /*
  * sysfs Interface
@@ -1024,7 +1024,7 @@ static struct attribute_group touchscreen_attr_group = {
  * There's a smaller variation of voltages when touched.  The harder the touch,
  * the lower the voltage.
  */
-void set_read_tnt(void) // touch / no-touch
+static void set_read_tnt(void) // touch / no-touch
 {
 	    // Set X1 and X2 as inputs with pullup
 	gpio_configure_pin(lf1000_l2p_port(TOUCHSCREEN_X1),
@@ -1080,7 +1080,7 @@ static void second_reading_tnt(void)
 
 #ifdef READ_Z1Z2_PRESSURE
 
-void set_read_p12(void)
+static void set_read_p12(void)
 {
 #if 1   // 15sep10  Experimental version suggested by Rob and Sam
         //          don't use pull-ups
@@ -1121,7 +1121,7 @@ void set_read_p12(void)
 #endif /*CONFIG_TOUCHSCREEN_LF1000_PRESSURE */
 
 /* Configure the gpios for reading the x-position voltage */
-void set_read_x(void)
+static void set_read_x(void)
 {
 	// float X1 and X2 first, then drive Y1 high and Y2 low
 	// gpio_configure_pin(PORT, PIN, FUNCTION, OUT=1, PULLUP=1, VALUE)
@@ -1139,7 +1139,7 @@ void set_read_x(void)
 }
 
 /* Configure the gpios for reading the y-position voltage */
-void set_read_y(void)
+static void set_read_y(void)
 {
 	// float Y1 and Y2 first, then drive X1 high and X2 low
 	// gpio_configure_pin(PORT, PIN, FUNCTION, OUT=1, PULLUP=1, VALUE)
@@ -2011,7 +2011,7 @@ static void get_touch(struct work_struct *work)
 
 
 
-void touchscreen_monitor_task(unsigned long data)
+static void touchscreen_monitor_task(unsigned long data)
 {
 	struct touch *t_dev = (struct touch *)data;
 
@@ -2024,13 +2024,13 @@ void touchscreen_monitor_task(unsigned long data)
 	}
 }
 
-int touchscreen_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
+static int touchscreen_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
                                           unsigned long arg)
 {
 	return 0;
 }
 	
-struct file_operations touchscreen_fops = {
+static struct file_operations touchscreen_fops = {
 	.owner = THIS_MODULE,
 	.ioctl = touchscreen_ioctl,
 };
@@ -2210,7 +2210,7 @@ static int lf1000_ts_remove(struct platform_device *pdev)
 
 /* fake release function to quiet "does not have a release()" warning */
 
-void lf1000_ts_release(struct device *dev)
+static void lf1000_ts_release(struct device *dev)
 {
 }
 
