@@ -41,7 +41,7 @@
  * Settings
  */
 
-#define LF1000_FB_NUM_BUFFERS	3	/* buffers per layer */
+#define LF1000_FB_NUM_BUFFERS	1	/* buffers per layer */
 
 /* The YUV layer is always last.  The other layers are RGB. */
 #define IS_YUV_LAYER(l)		(l->index == l->parent->num_layers-1)
