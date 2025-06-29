@@ -2029,7 +2029,7 @@ static void lf1000_ts2_release(struct device *dev)
 }
 
 static struct platform_device lf1000_ts2_device = {
-	.name		= "lf1000-touchscreen",
+	.name		= "lf1000-touchscreen2",
 	.id		= -1,
 	.num_resources	= 0,
 	.dev		= {
@@ -2041,7 +2041,7 @@ static struct platform_driver lf1000_ts2_driver = {
 	.probe		= lf1000_ts2_probe,
 	.remove		= lf1000_ts2_remove,
 	.driver		= {
-		.name	= "lf1000-touchscreen",
+		.name	= "lf1000-touchscreen2",
 		.owner	= THIS_MODULE,
 		},
 };
