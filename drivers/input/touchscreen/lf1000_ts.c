@@ -26,7 +26,7 @@
 #include <linux/freezer.h>
 #include <mach/gpio.h>
 #include <mach/adc.h>
-
+#include <linux/fb.h>
 #include <linux/sysfs.h>
 
 #define TOUCHSCREEN_SAMPLING_J	HZ / 100  // sample touchscreen every 10 ms
@@ -2118,9 +2118,11 @@ static int lf1000_ts_probe(struct platform_device *pdev)
 	i_dev->evbit[0]			   = BIT(EV_KEY) | BIT(EV_ABS);
 	i_dev->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);
 
+	struct fb_info *info = registered_fb[0];
+
 	/* initial screen coordination      min=[0]   max=[1]  fuzz=[2]  */
-	input_set_abs_params(i_dev, ABS_X, abs_x[0], abs_x[1], abs_x[2], 0);
-	input_set_abs_params(i_dev, ABS_Y, abs_y[0], abs_y[1], abs_y[2], 0);
+	input_set_abs_params(i_dev, ABS_X, abs_x[0], info->var.xres, abs_x[2], 0);
+	input_set_abs_params(i_dev, ABS_Y, abs_y[0], info->var.yres, abs_y[2], 0);
 	platform_set_drvdata(pdev, t_dev);
 
 	error = input_register_device(i_dev);
