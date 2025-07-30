@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.31
-# Wed Jul 30 15:42:47 2025
+# Wed Jul 30 15:59:13 2025
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -1457,6 +1457,8 @@ CONFIG_ANDROID_TIMED_OUTPUT=y
 # CONFIG_PLAN9AUTH is not set
 # CONFIG_LINE6_USB is not set
 # CONFIG_USB_CPC is not set
+CONFIG_RAMZSWAP=y
+CONFIG_RAMZSWAP_STATS=y
 # CONFIG_FB_UDL is not set
 
 #
