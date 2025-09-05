@@ -1501,8 +1501,8 @@ static int __init lf1000fb_probe_layer(struct lf1000fb_info *info, u8 index)
 		layer->fbinfo->fix.xpanstep = 1;
 		layer->fbinfo->fix.ypanstep = 1;
 		layer->fbinfo->fix.line_length = 4096;
-		fbi->var.xres_virtual = 4096;
-		fbi->var.yres_virtual = layer->fbinfo->fix.smem_len / 4096;
+		fbi->var.xres_virtual = info->screen->xres;
+		fbi->var.yres_virtual = info->screen->yres;
 		mlc_set_yuv_position(layer, info->num_layers - 1);
 		set_video_scaler(layer, fbi->var.xres, fbi->var.yres, 0);
 	} else {
@@ -1510,8 +1510,8 @@ static int __init lf1000fb_probe_layer(struct lf1000fb_info *info, u8 index)
 		layer->fbinfo->fix.type = FB_TYPE_PACKED_PIXELS;
 		layer->fbinfo->fix.xpanstep = 1;
 		layer->fbinfo->fix.ypanstep = 1;
-		fbi->var.xres_virtual = 4096;
-		fbi->var.yres_virtual = layer->fbinfo->fix.smem_len / 4096;
+		fbi->var.xres_virtual = info->screen->xres;
+		fbi->var.yres_virtual = info->screen->yres;
 
 		/* use ABGR888 initially */
 		fbi->var.bits_per_pixel	= 32;
