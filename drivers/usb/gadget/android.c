@@ -409,6 +409,42 @@ static struct platform_driver android_platform_driver = {
 	.probe = android_probe,
 };
 
+char *android_usb_functions[] = {
+#ifdef CONFIG_USB_ANDROID_ACM
+	"acm",
+#endif
+#ifdef CONFIG_USB_ANDROID_ADB
+	"adb",
+#endif
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+	"usb_mass_storage",
+#endif
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	"rndis",
+#endif
+};
+
+static struct android_usb_product android_products[] = {
+	{
+		.product_id = PRODUCT_ID,
+		.num_functions = ARRAY_SIZE(android_usb_functions),
+		.functions = android_usb_functions,
+	},
+};
+
+static struct android_usb_platform_data android_usb_pdata = {
+	.products = android_products,
+	.num_products = ARRAY_SIZE(android_products),
+	.functions = android_usb_functions,
+	.num_functions = ARRAY_SIZE(android_usb_functions),
+};
+
+static struct platform_device android_usb_device = {
+	.name = "android_usb",
+	.id = -1,
+	.dev = { .platform_data = &android_usb_pdata, },
+};
+
 static int __init init(void)
 {
 	struct android_dev *dev;
@@ -423,6 +459,7 @@ static int __init init(void)
 	dev->product_id = PRODUCT_ID;
 	_android_dev = dev;
 
+	platform_device_register(&android_usb_device);
 	return platform_driver_register(&android_platform_driver);
 }
 module_init(init);
