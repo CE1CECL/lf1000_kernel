@@ -58,21 +58,21 @@ static struct button_entry button_map[] = {
  {-1, -1, DPAD_DOWN, KEY_DOWN, EV_KEY, BUTTON_DELAY},
  {-1, -1, DPAD_RIGHT, KEY_RIGHT, EV_KEY, BUTTON_DELAY},
  {-1, -1, DPAD_LEFT, KEY_LEFT, EV_KEY, BUTTON_DELAY},
- {-1, -1, BUTTON_A, KEY_A, EV_KEY, BUTTON_DELAY},
- {-1, -1, BUTTON_B, KEY_B, EV_KEY, BUTTON_DELAY},
- {-1, -1, SHOULDER_LEFT, KEY_L, EV_KEY, BUTTON_DELAY},/* L 'shoulder' */
- {-1, -1, SHOULDER_RIGHT, KEY_R, EV_KEY, BUTTON_DELAY},/* R 'shoulder' */
- {-1, -1, BUTTON_HOME, KEY_M, EV_KEY, BUTTON_DELAY},/* menu / home / start */
- {-1, -1, BUTTON_HINT, KEY_H, EV_KEY, BUTTON_DELAY},/* hint */
- {-1, -1, BUTTON_PAUSE, KEY_P, EV_KEY, BUTTON_DELAY},/* pause */
- {-1, -1, BUTTON_BRIGHTNESS, KEY_X, EV_KEY, BRIGHTNESS_DELAY},/* brightness */
+ {-1, -1, BUTTON_A, KEY_ENTER, EV_KEY, BUTTON_DELAY},
+ {-1, -1, BUTTON_B, KEY_BACK, EV_KEY, BUTTON_DELAY},
+ {-1, -1, SHOULDER_LEFT, KEY_MENU, EV_KEY, BUTTON_DELAY},/* L 'shoulder' */
+ {-1, -1, SHOULDER_RIGHT, KEY_ENTER, EV_KEY, BUTTON_DELAY},/* R 'shoulder' */
+ {-1, -1, BUTTON_HOME, KEY_BACK, EV_KEY, BUTTON_DELAY},/* menu / home / start */
+ {-1, -1, BUTTON_HINT, KEY_HOME, EV_KEY, BUTTON_DELAY},/* hint */
+ {-1, -1, BUTTON_PAUSE, KEY_MENU, EV_KEY, BUTTON_DELAY},/* pause */
+ {-1, -1, BUTTON_BRIGHTNESS, KEY_BRIGHTNESS_CYCLE, EV_KEY, BRIGHTNESS_DELAY},/* brightness */
 							/* volume up  */
  {-1, -1, BUTTON_VOLUMEUP, KEY_VOLUMEUP, EV_KEY, BUTTON_DELAY},
 							/* volume down*/
  {-1, -1, BUTTON_VOLUMEDOWN, KEY_VOLUMEDOWN, EV_KEY, BUTTON_DELAY},
 							/* volume down*/
  {-1, -1, BUTTON_RED, KEY_RED, EV_KEY, BUTTON_DELAY},	/* K2 'red' key	*/
- {-1, -1, BUTTON_ESC, KEY_ESC, EV_KEY, BUTTON_DELAY},	/* Madrid "Esc" key */
+ {-1, -1, BUTTON_ESC, KEY_BACK, EV_KEY, BUTTON_DELAY},	/* Madrid "Esc" key */
 							/* headphone jack */
  {-1, -1, HEADPHONE_JACK, SW_HEADPHONE_INSERT, EV_SW, BUTTON_DELAY},
 };
@@ -83,8 +83,8 @@ static struct button_entry button_map[] = {
  * definitions. */
 static unsigned int lf1000_keycode[]= {
 	KEY_UP, KEY_DOWN, KEY_RIGHT, KEY_LEFT, 
-	KEY_A, KEY_B, KEY_L, KEY_R, KEY_M, KEY_H, KEY_P, KEY_X,
-	KEY_VOLUMEUP, KEY_VOLUMEDOWN, KEY_RED, KEY_ESC};
+	KEY_ENTER, KEY_BACK, KEY_MENU, KEY_ENTER, KEY_BACK, KEY_HOME, KEY_MENU, KEY_BRIGHTNESS_CYCLE,
+	KEY_VOLUMEUP, KEY_VOLUMEDOWN, KEY_RED, KEY_BACK};
 
 /*
  * device
