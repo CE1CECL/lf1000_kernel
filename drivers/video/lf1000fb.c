@@ -1123,51 +1123,20 @@ static int lf1000fb_blank(int blank, struct fb_info *info)
 
 	reg = readl(control);
 
-	switch (blank) {
-		case FB_BLANK_NORMAL:
-			/* make MLC background color black */
-			writel(0x000000, layer->parent->mlcreg + MLCBGCOLOR);
-			writel((1<<3) | readl(layer->parent->mlcreg + MLCCONTROLT), layer->parent->mlcreg + MLCCONTROLT);
-		case FB_BLANK_VSYNC_SUSPEND:
-		case FB_BLANK_HSYNC_SUSPEND:
-		case FB_BLANK_POWERDOWN:
-			/* disable */
-			reg &= ~(1<<5);
-			reg |= (1<<4);
-			writel(reg, control);
-			do {
-				reg = readl(control);
-			} while (reg & (1<<4));
+	/* palette on */
+	reg |= (1<<15);
+	writel(reg, control);
 
-			/* enable sleep */
-			reg &= ~(1<<14);
-			writel(reg, control);
+	/* disable sleep */
+	reg |= (1<<14);
+	writel(reg, control);
 
-			/* palette off */
-			reg &= ~(1<<15);
-			writel(reg, control);
-
-			layer->enabled = 0;
-			mlc_set_dirty(layer);
-			break;
-
-		case FB_BLANK_UNBLANK:
-			/* palette on */
-			reg |= (1<<15);
-			writel(reg, control);
-
-			/* disable sleep */
-			reg |= (1<<14);
-			writel(reg, control);
-
-			/* enable */
-			reg |= (1<<5);
-			writel(reg, control);
+	/* enable */
+	reg |= (1<<5);
+	writel(reg, control);
 			
-			layer->enabled = 1;
-			mlc_set_dirty(layer);
-			break;
-	}
+	layer->enabled = 1;
+	mlc_set_dirty(layer);
 
 	/* clone secondary MLC for TV out */
 	if (gpio_have_tvout()) {
