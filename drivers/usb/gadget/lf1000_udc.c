@@ -250,10 +250,6 @@ static int lf1000_udc_vbus_session(struct usb_gadget *_gadget, int is_active)
 
 	udc = container_of(_gadget, struct lf1000_udc, gadget);
 	
-	/* FIXME: we currently generate a keyboard event to notify userspace,
-	 * 	  find a better way to do this. */
-	input_report_switch(udc->input, SW_LID, is_active);
-
 	if (udc->driver && udc->driver->vbus_session)
 		udc->driver->vbus_session(&udc->gadget, is_active);
 
