@@ -271,7 +271,7 @@ CONFIG_ALIGNMENT_TRAP=y
 #
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="root=ubi0_0 rw rootfstype=ubifs ubi.mtd=Brio ubi.mtd=Bulk ubi.mtd=RFS init=/init androidboot.selinux=permissive console=tty0 earlyprintk=tty0 mem=63M mlc_fb=0x83f00000,0x00100000"
+CONFIG_CMDLINE="root=ubi0_0 rw rootfstype=ubifs ubi.mtd=Brio ubi.mtd=Bulk ubi.mtd=RFS init=/init androidboot.selinux=disabled androidboot.hardware=arm-lf1000 console=tty0 earlyprintk=tty0 mem=63M mlc_fb=0x83f00000,0x00100000"
 # CONFIG_XIP_KERNEL is not set
 CONFIG_KEXEC=y
 CONFIG_ATAGS_PROC=y
