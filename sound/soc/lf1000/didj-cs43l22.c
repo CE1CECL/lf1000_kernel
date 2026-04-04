@@ -263,6 +263,9 @@ static int didj_audio_probe(struct platform_device *pdev)
 
 	/* program codec defaults */
 	codec = didj_snd_devdata_cs43l22.card->codec;
+	if (!codec)
+		return -ENOMEM;
+
 	for (i = 0; i < ARRAY_SIZE(cs43L22_settings); i++)
 		codec->write(codec, cs43L22_settings[i][0],
 				cs43L22_settings[i][1]);
