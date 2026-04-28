@@ -328,7 +328,7 @@ static struct platform_driver didj_audio_driver = {
 	.probe	= didj_audio_probe,
 	.remove	= didj_audio_remove,
 	.driver	= {
-		.name	= "didj-asoc",
+		.name	= "didj-cs43l22-asoc",
 		.owner	= THIS_MODULE,
 	},
 };
