@@ -82,7 +82,7 @@ static struct lf1000_screen_info screens[] = {
 	},
 };
 
-static struct lf1000_screen_info *system_screen = &screens[0];
+static struct lf1000_screen_info *system_screen = NULL;
 
 static int __init screen_module_name(char *str)
 {
@@ -118,6 +118,13 @@ static struct dpc_priv {
 
 struct lf1000_screen_info *lf1000_get_screen_info(void)
 {
+	if (system_screen == NULL) {
+		if (gpio_have_gpio_madrid()) {
+			system_screen = &screens[1];
+		} else {
+			system_screen = &screens[0];
+		};
+	};
 	return system_screen;
 }
 EXPORT_SYMBOL_GPL(lf1000_get_screen_info);

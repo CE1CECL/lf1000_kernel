@@ -165,6 +165,9 @@ static int didj_audio_probe(struct platform_device *pdev)
 
 	/* program codec defaults */
 	codec = didj_snd_devdata_lfp100.card->codec;
+	if (!codec)
+		return -ENOMEM;
+
 	for (i = 0; i < ARRAY_SIZE(lfp100_settings); i++) {
 		codec->write(codec, lfp100_settings[i][0],
 			lfp100_settings[i][1]);
@@ -187,7 +190,7 @@ static struct platform_driver didj_audio_driver = {
 	.probe	= didj_audio_probe,
 	.remove	= didj_audio_remove,
 	.driver	= {
-		.name	= "didj-asoc",
+		.name	= "didj-lfp100-asoc",
 		.owner	= THIS_MODULE,
 	},
 };

@@ -425,16 +425,6 @@ static int device_resume(struct device *dev, pm_message_t state)
 }
 
 /**
- *	dpm_resume - Resume every device.
- *	@state: PM transition of the system being carried out.
- *
- *	Execute the appropriate "resume" callback for all devices the status of
- *	which indicates that they are inactive.
- */
-static void dpm_resume(pm_message_t state)
-{
-	struct list_head list;
-
  *	dpm_drv_timeout - Driver suspend / resume watchdog handler
  *	@data: struct device which timed out
  *
@@ -474,6 +464,16 @@ static void dpm_drv_wdclr(struct device *dev)
 }
 
 /**
+ *	dpm_resume - Resume every device.
+ *	@state: PM transition of the system being carried out.
+ *
+ *	Execute the appropriate "resume" callback for all devices the status of
+ *	which indicates that they are inactive.
+ */
+static void dpm_resume(pm_message_t state)
+{
+	struct list_head list;
+
 	INIT_LIST_HEAD(&list);
 	mutex_lock(&dpm_list_mtx);
 	transition_started = false;

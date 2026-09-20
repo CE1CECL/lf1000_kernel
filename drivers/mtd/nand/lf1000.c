@@ -764,7 +764,7 @@ static DEVICE_ATTR(cart_ecc_mode,
  *   blocked from erase or write commands to the nor (will return -EPERM).
  * By default, set the threshold up high, to protect everything in NOR
  */
-u32 nor_write_addr_threshold = 0x7fffffff;
+u32 nor_write_addr_threshold = 0;
 
 static ssize_t show_nor_write_addr_threshold(struct device *dev, struct device_attribute *attr, char *buf)
 {

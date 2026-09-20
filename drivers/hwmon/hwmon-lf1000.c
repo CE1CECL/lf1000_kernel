@@ -586,7 +586,7 @@ static void lf1000_power_button(struct work_struct *work)
 
 	/* report event if power button just pressed */
 	if (!hwmon_dev->power_button_count && power_button) {	
-		input_report_key(hwmon_dev->input, KEY_POWER, 1);
+		input_report_key(hwmon_dev->input, KEY_MENU, 1);
 		dev_info(&hwmon_dev->pdev->dev,
 			"Power button pressed\n");
 	}
@@ -597,7 +597,7 @@ static void lf1000_power_button(struct work_struct *work)
 
 		/* report event if power button just released */
 		if (hwmon_dev->power_button_count) {
-			input_report_key(hwmon_dev->input, KEY_POWER, 0);
+			input_report_key(hwmon_dev->input, KEY_MENU, 0);
 			dev_info(&hwmon_dev->pdev->dev,
 				"Power button released\n");
 		}
@@ -724,8 +724,6 @@ static void lf1000_set_battery(struct work_struct *work)
 	case CRITICAL_BATTERY:
 	    /* first report of critical battery */
 	    if(last_status != CRITICAL_BATTERY) {
-		input_report_key(hwmon_dev->input, KEY_BATTERY, 0); /* up */
-		input_report_key(hwmon_dev->input, KEY_BATTERY, 1); /* down */
 		dev_alert(&hwmon_dev->pdev->dev,
 				"Report Critical Battery (%d mv)\n",
 				hwmon_dev->supply_mv);
@@ -739,8 +737,6 @@ static void lf1000_set_battery(struct work_struct *work)
 		 last_status != CRITICAL_BATTERY) ||
 		(last_status != LOW_BATTERY &&
 		 hwmon_dev->request_battery_report)) {
-		input_report_key(hwmon_dev->input, KEY_MINUS, 0); /* up */
-		input_report_key(hwmon_dev->input, KEY_MINUS, 1); /* down */
 	    	dev_alert(&hwmon_dev->pdev->dev,
 				"Report Low Battery (%d mv)\n",
 				hwmon_dev->supply_mv);
@@ -751,8 +747,6 @@ static void lf1000_set_battery(struct work_struct *work)
 		hwmon_dev->supply_mv;
 		if (0 < supply_drop &&
 		    hwmon_dev->low_battery_repeat_mv < supply_drop) {
-		    input_report_key(hwmon_dev->input, KEY_MINUS, 0); /* up */
-		    input_report_key(hwmon_dev->input, KEY_MINUS, 1); /* down */
 		    dev_alert(&hwmon_dev->pdev->dev,
 				    "Report Low Battery (%d mv)\n",
 				    hwmon_dev->supply_mv);
@@ -765,8 +759,6 @@ static void lf1000_set_battery(struct work_struct *work)
 	    /* first report of BATTERY, key down */
 	    if ((last_status != BATTERY && last_status != CRITICAL_BATTERY) ||
 		(last_status != BATTERY && hwmon_dev->request_battery_report)) {
-		input_report_key(hwmon_dev->input, KEY_EQUAL, 0); /* up */
-		input_report_key(hwmon_dev->input, KEY_EQUAL, 1); /* down */
 		dev_alert(&hwmon_dev->pdev->dev, "Report Battery (%d mv)\n",
 				hwmon_dev->supply_mv);
 	    }
@@ -776,8 +768,6 @@ static void lf1000_set_battery(struct work_struct *work)
 	    /* first report of EXTERNAL, key down */
 	    if ((last_status != EXTERNAL && last_status != CRITICAL_BATTERY) ||
 	       (last_status != EXTERNAL && hwmon_dev->request_battery_report)) {
-		input_report_key(hwmon_dev->input, KEY_UP, 0); /* up */
-		input_report_key(hwmon_dev->input, KEY_UP, 1); /* down */
 		dev_alert(&hwmon_dev->pdev->dev, "Report External (%d mv)\n",
 				hwmon_dev->supply_mv);
 	    }
@@ -787,8 +777,6 @@ static void lf1000_set_battery(struct work_struct *work)
 	    /* first report of NIMH, key down */
 	    if ((last_status != NIMH && last_status != CRITICAL_BATTERY) ||
 		(last_status != NIMH && hwmon_dev->request_battery_report)) {
-		input_report_key(hwmon_dev->input, KEY_KPEQUAL, 0); /* up */
-		input_report_key(hwmon_dev->input, KEY_KPEQUAL, 1); /* down */
 		dev_alert(&hwmon_dev->pdev->dev, "Report NIMH (%d mv)\n",
 				hwmon_dev->supply_mv);
 	    }
@@ -801,8 +789,6 @@ static void lf1000_set_battery(struct work_struct *work)
 					last_status != CRITICAL_BATTERY) ||
 		(last_status != NIMH_CHARGER &&
 					hwmon_dev->request_battery_report)) {
-		input_report_key(hwmon_dev->input, KEY_PAGEUP, 0); /* up */
-		input_report_key(hwmon_dev->input, KEY_PAGEUP, 1); /* down */
 		dev_alert(&hwmon_dev->pdev->dev, "Report NIMH_CHARGER (%d mv)\n",
 				hwmon_dev->supply_mv);
 	    }

@@ -41,7 +41,7 @@
  * Settings
  */
 
-#define LF1000_FB_NUM_BUFFERS	3	/* buffers per layer */
+#define LF1000_FB_NUM_BUFFERS	1	/* buffers per layer */
 
 /* The YUV layer is always last.  The other layers are RGB. */
 #define IS_YUV_LAYER(l)		(l->index == l->parent->num_layers-1)
@@ -1123,51 +1123,20 @@ static int lf1000fb_blank(int blank, struct fb_info *info)
 
 	reg = readl(control);
 
-	switch (blank) {
-		case FB_BLANK_NORMAL:
-			/* make MLC background color black */
-			writel(0x000000, layer->parent->mlcreg + MLCBGCOLOR);
-			writel((1<<3) | readl(layer->parent->mlcreg + MLCCONTROLT), layer->parent->mlcreg + MLCCONTROLT);
-		case FB_BLANK_VSYNC_SUSPEND:
-		case FB_BLANK_HSYNC_SUSPEND:
-		case FB_BLANK_POWERDOWN:
-			/* disable */
-			reg &= ~(1<<5);
-			reg |= (1<<4);
-			writel(reg, control);
-			do {
-				reg = readl(control);
-			} while (reg & (1<<4));
+	/* palette on */
+	reg |= (1<<15);
+	writel(reg, control);
 
-			/* enable sleep */
-			reg &= ~(1<<14);
-			writel(reg, control);
+	/* disable sleep */
+	reg |= (1<<14);
+	writel(reg, control);
 
-			/* palette off */
-			reg &= ~(1<<15);
-			writel(reg, control);
-
-			layer->enabled = 0;
-			mlc_set_dirty(layer);
-			break;
-
-		case FB_BLANK_UNBLANK:
-			/* palette on */
-			reg |= (1<<15);
-			writel(reg, control);
-
-			/* disable sleep */
-			reg |= (1<<14);
-			writel(reg, control);
-
-			/* enable */
-			reg |= (1<<5);
-			writel(reg, control);
+	/* enable */
+	reg |= (1<<5);
+	writel(reg, control);
 			
-			layer->enabled = 1;
-			mlc_set_dirty(layer);
-			break;
-	}
+	layer->enabled = 1;
+	mlc_set_dirty(layer);
 
 	/* clone secondary MLC for TV out */
 	if (gpio_have_tvout()) {
@@ -1501,8 +1470,8 @@ static int __init lf1000fb_probe_layer(struct lf1000fb_info *info, u8 index)
 		layer->fbinfo->fix.xpanstep = 1;
 		layer->fbinfo->fix.ypanstep = 1;
 		layer->fbinfo->fix.line_length = 4096;
-		fbi->var.xres_virtual = 4096;
-		fbi->var.yres_virtual = layer->fbinfo->fix.smem_len / 4096;
+		fbi->var.xres_virtual = info->screen->xres;
+		fbi->var.yres_virtual = info->screen->yres;
 		mlc_set_yuv_position(layer, info->num_layers - 1);
 		set_video_scaler(layer, fbi->var.xres, fbi->var.yres, 0);
 	} else {
@@ -1510,8 +1479,8 @@ static int __init lf1000fb_probe_layer(struct lf1000fb_info *info, u8 index)
 		layer->fbinfo->fix.type = FB_TYPE_PACKED_PIXELS;
 		layer->fbinfo->fix.xpanstep = 1;
 		layer->fbinfo->fix.ypanstep = 1;
-		fbi->var.xres_virtual = 4096;
-		fbi->var.yres_virtual = layer->fbinfo->fix.smem_len / 4096;
+		fbi->var.xres_virtual = info->screen->xres;
+		fbi->var.yres_virtual = info->screen->yres;
 
 		/* use ABGR888 initially */
 		fbi->var.bits_per_pixel	= 32;

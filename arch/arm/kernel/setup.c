@@ -624,7 +624,9 @@ __tagtable(ATAG_REVISION, parse_tag_revision);
 
 static int __init parse_tag_cmdline(const struct tag *tag)
 {
+#if !defined(CONFIG_CMDLINE)
 	strlcpy(default_command_line, tag->u.cmdline.cmdline, COMMAND_LINE_SIZE);
+#endif
 	return 0;
 }
 
@@ -721,15 +723,15 @@ void __init setup_arch(char **cmdline_p)
 	if (tags->hdr.tag != ATAG_CORE)
 		tags = (struct tag *)&init_tags;
 
-	if (mdesc->fixup)
-		mdesc->fixup(mdesc, tags, &from, &meminfo);
-
 	if (tags->hdr.tag == ATAG_CORE) {
 		if (meminfo.nr_banks != 0)
 			squash_mem_tags(tags);
 		save_atags(tags);
 		parse_tags(tags);
 	}
+
+	if (mdesc->fixup)
+		mdesc->fixup(mdesc, tags, &from, &meminfo);
 
 	init_mm.start_code = (unsigned long) _text;
 	init_mm.end_code   = (unsigned long) _etext;

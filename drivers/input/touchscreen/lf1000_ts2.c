@@ -26,7 +26,7 @@
 #include <linux/freezer.h>
 #include <mach/gpio.h>
 #include <mach/adc.h>
-
+#include <linux/fb.h>
 #include <linux/sysfs.h>
 
 #define LED1_ON gpio_configure_pin(GPIO_PORT_B, GPIO_PIN0, GPIO_GPIOFN, 1, 0, 0)
@@ -124,9 +124,9 @@ static int scan_delay_lut[SCAN_DELAY_LUT_SIZE] = { 5, 10, 15, 20, 30, 40, 60, 80
 
 /* Enable the following #define if you want to collect nand access timing data*/
 // #define TS_TIMING 1
-int timing = 0;
+static int timing = 0;
 
-struct touch {
+static struct touch {
 	struct input_dev	*i_dev, *iraw_dev;
 
 	struct task_struct	*ts_task;
@@ -224,7 +224,7 @@ struct touch {
 	int	major;
 } touch_dev;
 
-struct touch * t_dev = &touch_dev;
+static struct touch * t_dev = &touch_dev;
 
 #ifdef TS_TIMING
 #include <mach/platform.h>
@@ -238,7 +238,7 @@ struct touch * t_dev = &touch_dev;
 /* Timer Clock Rate: 4.5Mhz */
 
 /* start the stopwatch */
-void timer_start(void)
+static void timer_start(void)
 {
 	/* make sure the timer is stopped */
 	BIT_CLR(TIMER32(TMRCONTROL), RUN);
@@ -1146,7 +1146,7 @@ static struct attribute_group touchscreen_attr_group = {
 	.attrs = touchscreen_attributes
 };
 
-int adc_GetMedian3Reading(int channel)
+static int adc_GetMedian3Reading(int channel)
 {
 	int a, b, c;
 	a = adc_GetReading(channel);
@@ -1171,7 +1171,7 @@ int adc_GetMedian3Reading(int channel)
 	}
 }
 
-int adc_GetMedian4Reading(int channel)
+static int adc_GetMedian4Reading(int channel)
 {
 	int a, b, c, d, min, max;
 	a = adc_GetReading(channel);
@@ -1191,7 +1191,7 @@ int adc_GetMedian4Reading(int channel)
 
 #define adc_GetMedianReading(channel)  adc_GetMedian3Reading(channel)
 
-void delay_in_us (void)
+static void delay_in_us (void)
 {
 	if (t_dev->scanning)
 		udelay (scan_delay_lut[t_dev->scan_ctr & (SCAN_DELAY_LUT_SIZE-1)]);
@@ -1199,7 +1199,7 @@ void delay_in_us (void)
 		udelay (t_dev->delay_in_us);
 }
 
-void y_delay_in_us (void)
+static void y_delay_in_us (void)
 {
 	if (t_dev->scanning)
 		udelay (scan_delay_lut[t_dev->scan_ctr & (SCAN_DELAY_LUT_SIZE-1)]);
@@ -1207,7 +1207,7 @@ void y_delay_in_us (void)
 		udelay (t_dev->y_delay_in_us);
 }
 
-void tnt_delay_in_us (void)
+static void tnt_delay_in_us (void)
 {
 	if (t_dev->scanning)
 		udelay (scan_delay_lut[t_dev->scan_ctr & (SCAN_DELAY_LUT_SIZE-1)]);
@@ -1225,7 +1225,7 @@ void tnt_delay_in_us (void)
  * There's a smaller variation of voltages when touched.  The harder the touch,
  * the lower the voltage.
  */
-void set_read_tnt(void) // touch / no-touch
+static void set_read_tnt(void) // touch / no-touch
 {
 	switch (t_dev->tnt_mode)
 	{
@@ -1292,7 +1292,7 @@ static void second_reading_tnt(void)
 }
 
 
-void set_read_p12(void)
+static void set_read_p12(void)
 {
 	// 15sep10  Experimental version suggested by Rob and Sam
         //          don't use pull-ups
@@ -1315,7 +1315,7 @@ void set_read_p12(void)
 
 
 /* Configure the gpios for reading the x-position voltage */
-void set_read_x(void)
+static void set_read_x(void)
 {
 	// float X1 and X2 first, then drive Y1 high and Y2 low
 	// gpio_configure_pin(PORT, PIN, FUNCTION, OUT=1, PULLUP=1, VALUE)
@@ -1335,7 +1335,7 @@ void set_read_x(void)
 }
 
 /* Configure the gpios for reading the y-position voltage */
-void set_read_y(void)
+static void set_read_y(void)
 {
 	// float Y1 and Y2 first, then drive X1 high and X2 low
 	// gpio_configure_pin(PORT, PIN, FUNCTION, OUT=1, PULLUP=1, VALUE)
@@ -1777,7 +1777,7 @@ static void get_touch(struct work_struct *work)
 #endif
 }
 
-void touchscreen_monitor_task(unsigned long data)
+static void touchscreen_monitor_task(unsigned long data)
 {
 	struct touch *t_dev = (struct touch *)data;
 
@@ -1790,13 +1790,13 @@ void touchscreen_monitor_task(unsigned long data)
 	}
 }
 
-int touchscreen_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
+static int touchscreen_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
                                           unsigned long arg)
 {
 	return 0;
 }
 	
-struct file_operations touchscreen_fops = {
+static struct file_operations touchscreen_fops = {
 	.owner = THIS_MODULE,
 	.ioctl = touchscreen_ioctl,
 };
@@ -1941,10 +1941,12 @@ static int lf1000_ts2_probe(struct platform_device *pdev)
 	i_dev->evbit[0]			   = BIT(EV_KEY) | BIT(EV_ABS);
 	i_dev->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);
 
+	struct fb_info *info = registered_fb[0];
+
 	/* initial screen coordination      min=[0]   max=[1]  fuzz=[2]  */
-	input_set_abs_params(i_dev, ABS_X, abs_x[0], abs_x[1], abs_x[2], 0);
-	input_set_abs_params(i_dev, ABS_Y, abs_y[0], abs_y[1], abs_y[2], 0);
-	input_set_abs_params(i_dev, ABS_PRESSURE, abs_p[0], abs_p[1], abs_p[2], 0);
+	input_set_abs_params(i_dev, ABS_X, abs_x[0], info->var.xres, abs_x[2], 0);
+	input_set_abs_params(i_dev, ABS_Y, abs_y[0], info->var.yres, abs_y[2], 0);
+	input_set_abs_params(i_dev, ABS_PRESSURE, abs_p[0], info->var.xres, abs_p[2], 0);
 	platform_set_drvdata(pdev, t_dev);
 
 	error = input_register_device(i_dev);
@@ -2024,12 +2026,12 @@ static int lf1000_ts2_remove(struct platform_device *pdev)
 
 /* fake release function to quiet "does not have a release()" warning */
 
-void lf1000_ts2_release(struct device *dev)
+static void lf1000_ts2_release(struct device *dev)
 {
 }
 
 static struct platform_device lf1000_ts2_device = {
-	.name		= "lf1000-touchscreen",
+	.name		= "lf1000-touchscreen2",
 	.id		= -1,
 	.num_resources	= 0,
 	.dev		= {
@@ -2041,7 +2043,7 @@ static struct platform_driver lf1000_ts2_driver = {
 	.probe		= lf1000_ts2_probe,
 	.remove		= lf1000_ts2_remove,
 	.driver		= {
-		.name	= "lf1000-touchscreen",
+		.name	= "lf1000-touchscreen2",
 		.owner	= THIS_MODULE,
 		},
 };
