@@ -36,8 +36,6 @@
 
 #include <asm/uaccess.h>
 
-extern void printascii(char *);
-
 /*
  * Architectures can override it:
  */
@@ -56,7 +54,7 @@ extern void printascii(char *);
 
 /* We show everything that is MORE important than this.. */
 #define MINIMUM_CONSOLE_LOGLEVEL 1 /* Minimum loglevel we let people use */
-#define DEFAULT_CONSOLE_LOGLEVEL 2 /* anything MORE serious than KERN_DEBUG */
+#define DEFAULT_CONSOLE_LOGLEVEL 7 /* anything MORE serious than KERN_DEBUG */
 
 DECLARE_WAIT_QUEUE_HEAD(log_wait);
 
@@ -692,10 +690,6 @@ static const char recursion_bug_msg [] =
 static int recursion_bug;
 static int new_text_line = 1;
 static char printk_buf[1024];
-
-#ifdef	CONFIG_DEBUG_LL
-	printascii(printk_buf);
-#endif
 
 asmlinkage int vprintk(const char *fmt, va_list args)
 {

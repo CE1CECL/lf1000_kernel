@@ -885,8 +885,10 @@ static const struct {
 	const struct file_operations	*fops;
 	struct backing_dev_info	*dev_info;
 } devlist[] = { /* list of minor devices */
+#ifdef CONFIG_DEVMEM
 	{1, "mem",     S_IRUSR | S_IWUSR | S_IRGRP, &mem_fops,
 		&directly_mappable_cdev_bdi},
+#endif
 #ifdef CONFIG_DEVKMEM
 	{2, "kmem",    S_IRUSR | S_IWUSR | S_IRGRP, &kmem_fops,
 		&directly_mappable_cdev_bdi},

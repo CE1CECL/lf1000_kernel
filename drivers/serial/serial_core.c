@@ -94,9 +94,6 @@ static void uart_stop(struct tty_struct *tty)
 static void __uart_start(struct tty_struct *tty)
 {
 	struct uart_state *state = tty->driver_data;
-	if (port->ops->wake_peer)
-		port->ops->wake_peer(port);
-
 	struct uart_port *port = state->port;
 
 	if (!uart_circ_empty(&state->info.xmit) && state->info.xmit.buf &&

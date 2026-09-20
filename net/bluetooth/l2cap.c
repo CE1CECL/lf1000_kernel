@@ -1182,7 +1182,11 @@ static inline int l2cap_do_send(struct sock *sk, struct msghdr *msg, int len)
 
 		frag = &(*frag)->next;
 	}
-	err = hci_send_acl(conn->hcon, skb, 0);
+	if (lmp_no_flush_capable(hcon->hdev) && !l2cap_pi(sk)->flushable)
+		err = hci_send_acl(conn->hcon, skb, ACL_START_NO_FLUSH);
+	else
+		err = hci_send_acl(conn->hcon, skb, ACL_START);
+
 	if (err < 0)
 		goto fail;
 
