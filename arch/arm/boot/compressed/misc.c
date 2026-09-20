@@ -16,6 +16,9 @@
  *  This allows for a much quicker boot time.
  */
 
+/* ignore runtime version of virt_to_phys() and phys_to_virt() routines */
+#undef CONFIG_RUNTIME_PHYS_OFFSET
+
 unsigned int __machine_arch_type;
 
 #include <linux/compiler.h>	/* for inline */
@@ -329,7 +332,45 @@ decompress_kernel(ulg output_start, ulg free_mem_ptr_p, ulg free_mem_ptr_end_p,
 
 	makecrc();
 	putstr("Uncompressing Linux...");
+	/* 1=Ping oscilloscope */
+	if (0)
+	{
+#define REG32(addr) *((volatile u32 *)(addr))
+#define BIT_SET(v,b)	(v |= (1<<(b)))
+#define BIT_CLR(v,b)	(v &= ~(1<<(b)))
+#define GPIO32(x)       REG32(LF1000_GPIO_BASE+x)
+#define GPIO_PORT_B 1
+#define GPIO_PIN8 8
+#define GPIO_GPIOFN 0
+#define GPIOAALTFN0		0x20
+#define GPIOAOUT		0x00
+#define GPIOAOUTENB		0x04
+		u32 reg, pin, tmp;
+		reg = GPIOAALTFN0 + GPIO_PORT_B*0x40;
+		pin = GPIO_PIN8*2;
+		tmp = GPIO32(reg);
+		tmp &= ~(3<<pin);
+		tmp |= ((GPIO_GPIOFN)<<pin);
+		GPIO32(reg) = tmp;
+		pin = GPIO_PIN8;
+		reg = GPIOAOUT + GPIO_PORT_B*0x40;
+		BIT_SET(GPIO32(reg), pin);
+		reg = GPIOAOUTENB + GPIO_PORT_B*0x40;
+		BIT_SET(GPIO32(reg), pin);
+		reg = GPIOAOUT + GPIO_PORT_B*0x40;
+		BIT_SET(GPIO32(reg), pin);
+	}
 	gunzip();
+	/* Ping oscilloscope */
+	if (0)
+	{
+		u32 reg, pin;
+		pin = GPIO_PIN8;
+		reg = GPIOAOUT + GPIO_PORT_B*0x40;
+		BIT_CLR(GPIO32(reg), pin);
+		reg = GPIOAOUT + GPIO_PORT_B*0x40;
+		BIT_SET(GPIO32(reg), pin);
+	}
 	putstr(" done, booting the kernel.\n");
 	return output_ptr;
 }

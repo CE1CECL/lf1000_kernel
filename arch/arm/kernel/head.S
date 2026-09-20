@@ -22,8 +22,10 @@
 #include <asm/thread_info.h>
 #include <asm/system.h>
 
+#ifndef CONFIG_RUNTIME_PHYS_OFFSET
 #if (PHYS_OFFSET & 0x001fffff)
 #error "PHYS_OFFSET must be at an even 2MiB boundary!"
+#endif
 #endif
 
 #define KERNEL_RAM_VADDR	(PAGE_OFFSET + TEXT_OFFSET)
@@ -44,8 +46,8 @@
 	.globl	swapper_pg_dir
 	.equ	swapper_pg_dir, KERNEL_RAM_VADDR - 0x4000
 
-	.macro	pgtbl, rd
-	ldr	\rd, =(KERNEL_RAM_PADDR - 0x4000)
+	.macro	pgtbl, rd, phys_offset
+	add	\rd, \phys_offset, #(TEXT_OFFSET - 0x4000)
 	.endm
 
 #ifdef CONFIG_XIP_KERNEL
@@ -210,9 +212,26 @@ ENDPROC(__turn_mmu_on)
  * Returns:
  *  r0, r3, r6, r7 corrupted
  *  r4 = physical page table address
+ *  r5 = PHYS_OFFSET
  */
 __create_page_tables:
-	pgtbl	r4				@ page table address
+#ifdef CONFIG_RUNTIME_PHYS_OFFSET
+	adr	r5, stext
+	sub	r5, r5, #TEXT_OFFSET		@ r5 = phys_offset
+	ldr	r4, =0xfff00000
+	and	r5, r5, r4
+
+	ldr	r4, =(phys_offset - PAGE_OFFSET)
+	add	r4, r4, r5
+	str	r5, [r4]			@ save phys_offset
+#else
+	mov	r5, #(PHYS_OFFSET & 0xff000000)
+	.if	(PHYS_OFFSET & 0x00f00000)
+	orr	r5, r5, #(PHYS_OFFSET & 0x00f00000)
+	.endif
+#endif
+
+	pgtbl	r4, r5				@ r4 = page table address
 
 	/*
 	 * Clear the 16K level 1 swapper page table
@@ -257,10 +276,11 @@ __create_page_tables:
 	/*
 	 * Map some ram to cover our .data and .bss areas.
 	 */
-	orr	r3, r7, #(KERNEL_RAM_PADDR & 0xff000000)
-	.if	(KERNEL_RAM_PADDR & 0x00f00000)
-	orr	r3, r3, #(KERNEL_RAM_PADDR & 0x00f00000)
+	add	r3, r5, #(TEXT_OFFSET & 0xff000000)	@ r5 = PHYS_OFFSET
+	.if	(TEXT_OFFSET & 0x00f00000)
+	add	r3, r3, #(TEXT_OFFSET & 0x00f00000)
 	.endif
+	orr	r3, r3, r7
 	add	r0, r4,  #(KERNEL_RAM_VADDR & 0xff000000) >> 18
 	str	r3, [r0, #(KERNEL_RAM_VADDR & 0x00f00000) >> 18]!
 	ldr	r6, =(_end - 1)
@@ -276,10 +296,7 @@ __create_page_tables:
 	 * Then map first 1MB of ram in case it contains our boot params.
 	 */
 	add	r0, r4, #PAGE_OFFSET >> 18
-	orr	r6, r7, #(PHYS_OFFSET & 0xff000000)
-	.if	(PHYS_OFFSET & 0x00f00000)
-	orr	r6, r6, #(PHYS_OFFSET & 0x00f00000)
-	.endif
+	orr	r6, r7, r5
 	str	r6, [r0]
 
 #ifdef CONFIG_DEBUG_LL

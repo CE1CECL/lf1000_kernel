@@ -82,6 +82,8 @@
 
 static int kernel_init(void *);
 
+extern void printascii(char *);
+
 extern void init_IRQ(void);
 extern void fork_init(unsigned long);
 extern void mca_init(void);
@@ -552,6 +554,7 @@ asmlinkage void __init start_kernel(void)
 	char * command_line;
 	extern struct kernel_param __start___param[], __stop___param[];
 
+	printascii("\r");
 	smp_setup_processor_id();
 
 	/*

@@ -90,6 +90,8 @@
  *					the files or block devices used for
  *					backing storage
  *	ro=b[,b...]		Default false, booleans for read-only access
+ *	locked=b[,b...]		Default false, per lun booleans for lock status
+ *	enabled=b[,b...]	Default false, per lun booleans for enabling LUNs
  *	removable		Default false, boolean for removable media
  *	luns=N			Default N = number of filenames, number of
  *					LUNs to support
@@ -109,6 +111,10 @@
  *	buflen=N		Default N=16384, buffer size used (will be
  *					rounded down to a multiple of
  *					PAGE_CACHE_SIZE)
+ *
+ *	serial=XXXXXXXXXXXXXXXX	This is a hex string of up to 16 characters with
+ *				no leading 0x.
+ *	needs_repair=b[,b...]	Default false, boolean signals file system corrupt
  *
  * If CONFIG_USB_FILE_STORAGE_TEST is not set, only the "file", "ro",
  * "removable", "luns", "stall", and "cdrom" options are available; default
@@ -225,8 +231,9 @@
  * of the Gadget, USB Mass Storage, and SCSI protocols.
  */
 
+#define USE_LEAPFROG_USB_DATA
 
-/* #define VERBOSE_DEBUG */
+#define VERBOSE_DEBUG
 /* #define DUMP_MSGS */
 
 
@@ -253,9 +260,16 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 
+#include <linux/rtc.h>
+
+#include <mach/power.h>
 #include "gadget_chips.h"
 
+extern enum lf1000_power_status lf1000_get_battery_status(void);
 
+#ifdef USE_LEAPFROG_USB_DATA
+#include <mach/gpio.h>
+#endif
 
 /*
  * Kbuild is not very cooperative with respect to linking separately
@@ -270,9 +284,15 @@
 
 /*-------------------------------------------------------------------------*/
 
+#ifdef USE_LEAPFROG_USB_DATA
+#define DRIVER_DESC		"Leapfrog Mass Storage"
+#define DRIVER_NAME		"g_file_storage"
+#define DRIVER_VERSION		"0.9"
+#else
 #define DRIVER_DESC		"File-backed Storage Gadget"
 #define DRIVER_NAME		"g_file_storage"
 #define DRIVER_VERSION		"20 November 2008"
+#endif
 
 static const char longname[] = DRIVER_DESC;
 static const char shortname[] = DRIVER_NAME;
@@ -281,13 +301,27 @@ MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_AUTHOR("Alan Stern");
 MODULE_LICENSE("Dual BSD/GPL");
 
+#ifdef USE_LEAPFROG_USB_DATA
+#define DRIVER_VENDOR_ID		0x0f63	// Leap Frog VID
+#define DRIVER_PRODUCT_ID_EMERALD	0x0020	// Emerald DFTP2
+#define DRIVER_PRODUCT_ID_MADRID	0x0021	// Madrid DFTP2
+#define DRIVER_PRODUCT_ID 		DRIVER_PRODUCT_ID_EMERALD //Default Emerald
+
+static char vendor_id[] = "LeapFrog";
+static char product_id[] = "Didj            ";
+#define PRODUCT_STRING_EMERALD		"LeapsterExplorer"
+#define PRODUCT_STRING_MADRID		"LeapPad"
+
+#else
 /* Thanks to NetChip Technologies for donating this product ID.
  *
  * DO NOT REUSE THESE IDs with any other driver!!  Ever!!
  * Instead:  allocate your own, using normal USB-IF procedures. */
 #define DRIVER_VENDOR_ID	0x0525	// NetChip
 #define DRIVER_PRODUCT_ID	0xa4a5	// Linux-USB File-backed Storage Gadget
-
+static char vendor_id[] = "Linux   ";
+static char product_id[] = "File-Stor Gadget";
+#endif
 
 /*
  * This driver assumes self-powered hardware and has no way for users to
@@ -349,6 +383,10 @@ static struct {
 	unsigned int	num_filenames;
 	unsigned int	num_ros;
 	unsigned int	nluns;
+	int		locked[MAX_LUNS];
+	int		enabled[MAX_LUNS];
+	int		num_locks;
+	int		num_enables;
 
 	int		removable;
 	int		can_stall;
@@ -365,18 +403,30 @@ static struct {
 	char		*transport_name;
 	int		protocol_type;
 	char		*protocol_name;
-
+	/* The CBI specification limits the serial string to 12 uppercase
+ 	 * hexadecimal characters. */
+	/* NOTE: Leapfrog serial number is 16 hex digits.  We're using BBB, so
+	 * this should be okay.  But if you turn on CBI and things stop working,
+	 * this is * probably why!
+	 */
+	char serial[17];
+	int		needs_repair[MAX_LUNS];
+	int		num_needs_repair;
 } mod_data = {					// Default values
 	.transport_parm		= "BBB",
 	.protocol_parm		= "SCSI",
 	.removable		= 0,
-	.can_stall		= 1,
+	.can_stall		= 0,
 	.cdrom			= 0,
 	.vendor			= DRIVER_VENDOR_ID,
 	.product		= DRIVER_PRODUCT_ID,
 	.release		= 0xffff,	// Use controller chip type
 	.buflen			= 16384,
+	.serial			= "0000000000000000"
 	};
+
+module_param_named(cdrom, mod_data.cdrom, bool, S_IRUGO);
+MODULE_PARM_DESC(cdrom, "true to emulate cdrom instead of disk");
 
 
 module_param_array_named(file, mod_data.file, charp, &mod_data.num_filenames,
@@ -385,6 +435,12 @@ MODULE_PARM_DESC(file, "names of backing files or devices");
 
 module_param_array_named(ro, mod_data.ro, bool, &mod_data.num_ros, S_IRUGO);
 MODULE_PARM_DESC(ro, "true to force read-only");
+
+module_param_array_named(locked, mod_data.locked, bool, &mod_data.num_locks, S_IRUGO);
+MODULE_PARM_DESC(locked, "true to force locked");
+
+module_param_array_named(enabled, mod_data.enabled, bool, &mod_data.num_enables, S_IRUGO);
+MODULE_PARM_DESC(enabled, "true to enable");
 
 module_param_named(luns, mod_data.nluns, uint, S_IRUGO);
 MODULE_PARM_DESC(luns, "number of LUNs");
@@ -395,9 +451,11 @@ MODULE_PARM_DESC(removable, "true to simulate removable media");
 module_param_named(stall, mod_data.can_stall, bool, S_IRUGO);
 MODULE_PARM_DESC(stall, "false to prevent bulk stalls");
 
-module_param_named(cdrom, mod_data.cdrom, bool, S_IRUGO);
-MODULE_PARM_DESC(cdrom, "true to emulate cdrom instead of disk");
+module_param_string(serial, mod_data.serial, sizeof(mod_data.serial), S_IRUGO);
+MODULE_PARM_DESC(serial, "Serial number string up to 16 ascii chars.");
 
+module_param_array_named(needs_repair, mod_data.needs_repair, bool, &mod_data.num_needs_repair, S_IRUGO);
+MODULE_PARM_DESC(needs_repair, "true signals PC should fix file system");
 
 /* In the non-TEST version, only the module parameters listed above
  * are available. */
@@ -520,6 +578,8 @@ struct interrupt_data {
 #define SC_WRITE_6			0x0a
 #define SC_WRITE_10			0x2a
 #define SC_WRITE_12			0xaa
+#define SC_VENDOR_DEFINED_BEGIN		0xc0
+#define SC_VENDOR_DEFINED_END		0xff
 
 /* SCSI Sense Key/Additional Sense Code/ASC Qualifier values */
 #define SS_NO_SENSE				0
@@ -565,8 +625,9 @@ struct interrupt_data {
 
 #endif /* CONFIG_USB_FILE_STORAGE_TEST */
 
-
+#define MAX_FNAME_LEN 256
 struct lun {
+	char		fname[MAX_FNAME_LEN];
 	struct file	*filp;
 	loff_t		file_length;
 	loff_t		num_sectors;
@@ -581,6 +642,18 @@ struct lun {
 	u32		unit_attention_data;
 
 	struct device	dev;
+
+	/* Each LUN can be locked or unlocked.  If it is locked, it's not
+	 * visible over USB.  This is meant to be controlled using custom scsi
+	 * commands, but it can also be controlled at load time or runtime.
+	 */
+	int		locked;
+	/* Each LUN can be enabled or disabled.  This is just like locked, but
+	 * it is meant to be controlled by the device at runtime.
+	 */
+	int		enabled;
+	/* Each LUN can have its file system marked as needing repair */
+	int		needs_repair;
 };
 
 #define backing_file_is_open(curlun)	((curlun)->filp != NULL)
@@ -606,6 +679,7 @@ enum fsg_buffer_state {
 
 struct fsg_buffhd {
 	void				*buf;
+	dma_addr_t			dma;
 	enum fsg_buffer_state		state;
 	struct fsg_buffhd		*next;
 
@@ -714,6 +788,8 @@ struct fsg_dev {
 	unsigned int		nluns;
 	struct lun		*luns;
 	struct lun		*curlun;
+	
+	int disconnect_ok;
 };
 
 typedef void (*fsg_routine_t)(struct fsg_dev *);
@@ -739,6 +815,8 @@ static void set_bulk_out_req_length(struct fsg_dev *fsg,
 static struct fsg_dev			*the_fsg;
 static struct usb_gadget_driver		fsg_driver;
 
+static void fsync_all(struct fsg_dev *fsg);
+static int open_backing_file(struct lun *curlun, const char *filename);
 static void	close_backing_file(struct lun *curlun);
 
 
@@ -852,7 +930,7 @@ config_desc = {
 	.bConfigurationValue =	CONFIG_VALUE,
 	.iConfiguration =	STRING_CONFIG,
 	.bmAttributes =		USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_SELFPOWER,
-	.bMaxPower =		CONFIG_USB_GADGET_VBUS_DRAW / 2,
+	.bMaxPower =		1,	// self-powered
 };
 
 static struct usb_otg_descriptor
@@ -997,13 +1075,14 @@ ep_desc(struct usb_gadget *g, struct usb_endpoint_descriptor *fs,
 /* The CBI specification limits the serial string to 12 uppercase hexadecimal
  * characters. */
 static char				manufacturer[64];
-static char				serial[13];
+static char			serial_no_null[sizeof(mod_data.serial)-1];
+static int			serial_len;
 
 /* Static strings, in UTF-8 (for simplicity we use only ASCII characters) */
 static struct usb_string		strings[] = {
 	{STRING_MANUFACTURER,	manufacturer},
 	{STRING_PRODUCT,	longname},
-	{STRING_SERIAL,		serial},
+	{STRING_SERIAL,		serial_no_null},
 	{STRING_CONFIG,		"Self-powered"},
 	{STRING_INTERFACE,	"Mass Storage"},
 	{}
@@ -1692,9 +1771,8 @@ static int do_write(struct fsg_dev *fsg)
 		curlun->sense_data = SS_WRITE_PROTECTED;
 		return -EINVAL;
 	}
-	spin_lock(&curlun->filp->f_lock);
-	curlun->filp->f_flags &= ~O_SYNC;	// Default is not to wait
-	spin_unlock(&curlun->filp->f_lock);
+	//curlun->filp->f_flags &= ~O_SYNC;	// Default is not to wait
+	curlun->filp->f_flags |= O_SYNC;	// The medium is shared, so we sync
 
 	/* Get the starting Logical Block Address and check that it's
 	 * not too big */
@@ -1861,6 +1939,276 @@ static int do_write(struct fsg_dev *fsg)
 	return -EIO;		// No default reply
 }
 
+/*-------------------------------------------------------------------------*/
+
+/*
+ * These are leapfrog specific functions.  They should be migrated to another
+ * module and registered somehow with this module to provide custom vendor
+ * commands.  This fanciness will have to be implemented at some other time.
+ * Also, it only works on little endian machines!  I know.  Sinful.
+ */
+#define LF_LOCK_DEVICE 0xC1
+#define LF_UNLOCK_DEVICE 0xC2
+#define LF_GET_SETTING 0xC3
+#define LF_SET_SETTING 0xC4
+#define LF_DISCONNECT_OK 0xC6
+
+/* Now for some settings that we can get */
+#define LF_RTC_COUNTER 1
+#define LF_BATTERY_LEVEL 2
+#define LF_SERIAL_NUMBER 3
+#define LF_NEEDS_REPAIR	6
+
+struct custom_cmd {
+	unsigned char opcode;
+	unsigned char setting; /* only used for kDeviceCmdGetSetting */
+	unsigned char unused[8];
+} __attribute__((packed));
+
+struct rtc_reply {
+	unsigned long value;
+} __attribute__((packed));
+
+struct battery_reply {
+	unsigned char value;
+} __attribute__((packed));
+
+struct st_needs_repair {
+	unsigned char value;
+} __attribute__((packed));
+
+/* values for battery levels */
+#define BATT_UNKNOWN 0
+#define BATT_CRITICAL 1
+#define BATT_LOW 2
+#define BATT_GOOD 3
+#define BATT_FULL 4
+
+/*
+ * get the battery status from the hwmon and convert it for user app
+ */
+unsigned char get_battery_value(void)
+{
+	enum lf1000_power_status s = lf1000_get_battery_status();
+
+	switch(s) {
+		case CRITICAL_BATTERY:	return BATT_CRITICAL;
+		case LOW_BATTERY:	return BATT_LOW;
+		case NIMH:
+		case BATTERY:		return BATT_GOOD;
+		case NIMH_CHARGER:
+		case EXTERNAL:		return BATT_FULL;
+		case UNKNOWN:		return BATT_UNKNOWN;
+	}
+	return BATT_UNKNOWN;
+}
+
+static int do_vendor_command(struct fsg_dev *fsg, struct fsg_buffhd *bh)
+{
+	int ret = 0, i;
+	u8 *buf = (u8 *)bh->buf;
+	struct rtc_reply rtcr;
+	struct battery_reply batr;
+	struct st_needs_repair repair;
+	struct custom_cmd *cc = (struct custom_cmd *)&fsg->cmnd[0];
+	struct lun *curlun;
+	struct rtc_time tm;
+	struct rtc_device *rtc_dev;
+
+	switch(fsg->cmnd[0]) {
+	case LF_LOCK_DEVICE:
+		/* This should be per lun, but the command is not defined that
+		 * way.  Lame. 
+		 */
+		fsync_all(fsg);
+		for(i=0; i<fsg->nluns; i++) {
+			curlun = &fsg->luns[i];
+			if(curlun->locked)
+				continue;
+			
+			up_read(&fsg->filesem);
+			down_write(&fsg->filesem);
+
+			/* Eject current medium thus locking device */
+			if (backing_file_is_open(curlun)) {
+				close_backing_file(curlun);
+				curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
+			}
+			
+			curlun->locked = 1;
+			up_write(&fsg->filesem);
+			down_read(&fsg->filesem);
+		}
+		break;
+	case LF_UNLOCK_DEVICE:
+		for(i=0; i<fsg->nluns; i++) {
+			curlun = &fsg->luns[i];
+			if(!curlun->locked)
+				continue;
+
+			up_read(&fsg->filesem);
+			down_write(&fsg->filesem);
+			if (curlun->fname[0] && curlun->enabled) {
+				ret = open_backing_file(curlun, curlun->fname);
+				if (ret == 0)
+					curlun->unit_attention_data =
+						SS_NOT_READY_TO_READY_TRANSITION;
+			}
+			if (ret == 0)
+				curlun->locked = 0;
+			up_write(&fsg->filesem);
+			down_read(&fsg->filesem);
+			if (ret != 0)
+				break;
+		}
+		break;
+	case LF_GET_SETTING:
+		switch (cc->setting) {
+		case LF_BATTERY_LEVEL:
+			batr.value = get_battery_value();
+			memcpy(&buf[0], &batr, sizeof(struct battery_reply));
+			ret = sizeof(struct battery_reply);
+			break;
+
+		case LF_RTC_COUNTER:
+			rtcr.value = 0xFFFFFFFF;
+			rtc_dev = rtc_class_open("rtc0");
+			if(!rtc_dev) {
+				printk("failed to open rtc\n");
+			} else {
+				if(rtc_read_time(rtc_dev, &tm) != 0)
+					printk("failed to read time.\n");
+				else
+					rtc_tm_to_time(&tm, &rtcr.value);
+				rtc_class_close(rtc_dev);
+			}
+			memcpy(&buf[0], &rtcr, sizeof(struct rtc_reply));
+			ret = sizeof(struct rtc_reply);
+			break;
+		case LF_SERIAL_NUMBER:
+			memcpy(&buf[0], serial_no_null, serial_len);
+			buf[serial_len] = 0;
+			ret = serial_len + 1;
+			break;
+		case LF_NEEDS_REPAIR:
+		/* This should be per lun, but the command is not 
+		 * defined that way.
+		 */
+			repair.value=0;	// assume repair not needed
+			for(i=0; i<fsg->nluns; i++) {
+				curlun = &fsg->luns[i];
+				if(curlun->needs_repair) {
+					repair.value=1;
+					break;
+				}
+			}
+					
+			memcpy(&buf[0], &repair, sizeof(repair));
+			ret = sizeof(repair);
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case LF_SET_SETTING:
+		switch (cc->setting) {
+		case LF_NEEDS_REPAIR:
+			memcpy(&repair, &(fsg->cmnd[2]), sizeof(repair));
+			for(i=0; i<fsg->nluns; i++) {
+				curlun = &fsg->luns[i];
+				curlun->needs_repair=repair.value;
+			}
+			ret = sizeof(repair);
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case LF_DISCONNECT_OK:
+		fsg->disconnect_ok = 1;
+		ret = 0;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return ret;
+}
+
+static int check_vendor_command(struct fsg_dev *fsg)
+{
+	struct lun *curlun;
+	int i;
+	struct custom_cmd *cc = (struct custom_cmd *)&fsg->cmnd[0];
+
+	switch(fsg->cmnd[0]) {
+	case LF_LOCK_DEVICE:
+		if(fsg->data_dir != DATA_DIR_NONE)
+			return -EINVAL;
+		fsg->data_size_from_cmnd = 0;
+		for(i=0; i<fsg->nluns; i++) {
+			curlun = &fsg->luns[i];
+			if(curlun->locked)
+				continue;
+			
+			if (curlun->prevent_medium_removal &&
+			    backing_file_is_open(curlun)) {
+				LDBG(curlun, "eject attempt prevented\n");
+				return -EBUSY;
+			}
+		}
+		break;
+	case LF_UNLOCK_DEVICE:
+		if(fsg->data_dir != DATA_DIR_NONE)
+			return -EINVAL;
+		fsg->data_size_from_cmnd = 0;
+		break;
+	case LF_GET_SETTING:
+		if(fsg->data_dir != DATA_DIR_TO_HOST)
+			return -EINVAL;
+		switch (cc->setting) {
+		case LF_BATTERY_LEVEL:
+			fsg->data_size_from_cmnd = sizeof(struct battery_reply);
+			break;
+
+		case LF_RTC_COUNTER:
+			fsg->data_size_from_cmnd = sizeof(struct rtc_reply);
+			break;
+
+		case LF_SERIAL_NUMBER:
+			fsg->data_size_from_cmnd = 256;
+			break;
+
+		case LF_NEEDS_REPAIR:
+			fsg->data_size_from_cmnd =
+				sizeof(struct st_needs_repair);
+			break;
+			
+		default:
+			return -EINVAL;
+		}
+		break;
+	case LF_SET_SETTING:
+		if(fsg->data_dir != DATA_DIR_FROM_HOST)
+			return -EINVAL;
+		switch (cc->setting) {
+		case LF_NEEDS_REPAIR:
+			fsg->data_size_from_cmnd =
+				sizeof(struct st_needs_repair);
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case LF_DISCONNECT_OK:
+		if(fsg->data_dir != DATA_DIR_NONE)
+			return -EINVAL;
+		fsg->data_size_from_cmnd = 0;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
 
 /*-------------------------------------------------------------------------*/
 
@@ -2011,29 +2359,22 @@ static int do_inquiry(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 {
 	u8	*buf = (u8 *) bh->buf;
 
-	static char vendor_id[] = "Linux   ";
-	static char product_disk_id[] = "File-Stor Gadget";
-	static char product_cdrom_id[] = "File-CD Gadget  ";
 
 	if (!fsg->curlun) {		// Unsupported LUNs are okay
 		fsg->bad_lun_okay = 1;
 		memset(buf, 0, 36);
 		buf[0] = 0x7f;		// Unsupported, no device-type
-		buf[4] = 31;		// Additional length
 		return 36;
 	}
 
-	memset(buf, 0, 8);
-	buf[0] = (mod_data.cdrom ? TYPE_CDROM : TYPE_DISK);
+	memset(buf, 0, 8);	// Non-removable, direct-access device
 	if (mod_data.removable)
 		buf[1] = 0x80;
 	buf[2] = 2;		// ANSI SCSI level 2
 	buf[3] = 2;		// SCSI-2 INQUIRY data format
 	buf[4] = 31;		// Additional length
 				// No special options
-	sprintf(buf + 8, "%-8s%-16s%04x", vendor_id,
-			(mod_data.cdrom ? product_cdrom_id :
-				product_disk_id),
+	sprintf(buf + 8, "%-8s%-16s%04x", vendor_id, product_id,
 			mod_data.release);
 	return 36;
 }
@@ -2669,6 +3010,7 @@ static int send_status(struct fsg_dev *fsg)
 
 		fsg->intr_buffhd = bh;		// Point to the right buffhd
 		fsg->intreq->buf = bh->inreq->buf;
+		fsg->intreq->dma = bh->inreq->dma;
 		fsg->intreq->context = bh;
 		start_transfer(fsg, fsg->intr_in, fsg->intreq,
 				&fsg->intreq_busy, &bh->state);
@@ -3043,12 +3385,22 @@ static int do_scsi_command(struct fsg_dev *fsg)
 
 	default:
  unknown_cmnd:
-		fsg->data_size_from_cmnd = 0;
-		sprintf(unknown, "Unknown x%02x", fsg->cmnd[0]);
-		if ((reply = check_command(fsg, fsg->cmnd_size,
-				DATA_DIR_UNKNOWN, 0xff, 0, unknown)) == 0) {
-			fsg->curlun->sense_data = SS_INVALID_COMMAND;
-			reply = -EINVAL;
+		/* Vendor specific commands should probably use a registration
+		 * mechanism.  But for now we do it all in this file.
+		 */
+		if((fsg->cmnd[0] >= SC_VENDOR_DEFINED_BEGIN) &&
+		   ((reply = check_vendor_command(fsg)) == 0) &&
+		   (check_command(fsg, 10, fsg->data_dir, 0xff, 0, "VENDOR") == 0)) {
+			reply = do_vendor_command(fsg, bh);
+		} else {
+			fsg->data_size_from_cmnd = 0;
+			sprintf(unknown, "Unknown x%02x", fsg->cmnd[0]);
+			if ((reply = check_command(fsg, fsg->cmnd_size,
+						   DATA_DIR_UNKNOWN, 0xff,
+						   0, unknown)) == 0) {
+				fsg->curlun->sense_data = SS_INVALID_COMMAND;
+				reply = -EINVAL;
+			}
 		}
 		break;
 	}
@@ -3304,6 +3656,7 @@ reset:
 		if ((rc = alloc_request(fsg, fsg->bulk_out, &bh->outreq)) != 0)
 			goto reset;
 		bh->inreq->buf = bh->outreq->buf = bh->buf;
+		bh->inreq->dma = bh->outreq->dma = bh->dma;
 		bh->inreq->context = bh->outreq->context = bh;
 		bh->inreq->complete = bulk_in_complete;
 		bh->outreq->complete = bulk_out_complete;
@@ -3315,8 +3668,8 @@ reset:
 	}
 
 	fsg->running = 1;
-	for (i = 0; i < fsg->nluns; ++i)
-		fsg->luns[i].unit_attention_data = SS_RESET_OCCURRED;
+	//for (i = 0; i < fsg->nluns; ++i)
+	//	fsg->luns[i].unit_attention_data = SS_RESET_OCCURRED;
 	return rc;
 }
 
@@ -3699,25 +4052,24 @@ static ssize_t show_ro(struct device *dev, struct device_attribute *attr, char *
 	return sprintf(buf, "%d\n", curlun->ro);
 }
 
+static ssize_t show_disconnect(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", the_fsg->disconnect_ok);
+}
+
 static ssize_t show_file(struct device *dev, struct device_attribute *attr,
 		char *buf)
 {
 	struct lun	*curlun = dev_to_lun(dev);
 	struct fsg_dev	*fsg = dev_get_drvdata(dev);
-	char		*p;
 	ssize_t		rc;
 
 	down_read(&fsg->filesem);
-	if (backing_file_is_open(curlun)) {	// Get the complete pathname
-		p = d_path(&curlun->filp->f_path, buf, PAGE_SIZE - 1);
-		if (IS_ERR(p))
-			rc = PTR_ERR(p);
-		else {
-			rc = strlen(p);
-			memmove(buf, p, rc);
-			buf[rc] = '\n';		// Add a newline
-			buf[++rc] = 0;
-		}
+	if (curlun->fname[0]) {
+		rc = strlen(curlun->fname);
+		memmove(buf, curlun->fname, rc);
+		buf[rc] = '\n';		// Add a newline
+		buf[++rc] = 0;
 	} else {				// No file, return 0 bytes
 		*buf = 0;
 		rc = 0;
@@ -3726,6 +4078,43 @@ static ssize_t show_file(struct device *dev, struct device_attribute *attr,
 	return rc;
 }
 
+static ssize_t show_locked(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct lun	*curlun = dev_to_lun(dev);
+
+	return sprintf(buf, "%d\n", curlun->locked);
+}
+
+/* Yet another hack.  The watchdog functionality is in the lf1000 controller
+ * driver, but it needs to know if the mass storage driver is enabled.  The
+ * solution is to migrate the watchdog to this driver, but that breaks
+ * userspace. 
+ */
+static int fsg_enabled(struct usb_gadget *gadget)
+{
+	struct lun *curlun;
+	int i;
+	for (i = 0; i < the_fsg->nluns; ++i) {
+		curlun = &the_fsg->luns[i];
+		if(curlun->enabled)
+			return 1;
+	}
+	return 0;
+}
+
+static ssize_t show_enabled(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct lun	*curlun = dev_to_lun(dev);
+
+	return sprintf(buf, "%d\n", curlun->enabled);
+}
+
+static ssize_t show_needs_repair(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct lun	*curlun = dev_to_lun(dev);
+
+	return sprintf(buf, "%d\n", curlun->needs_repair);
+}
 
 static ssize_t store_ro(struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t count)
@@ -3763,34 +4152,148 @@ static ssize_t store_file(struct device *dev, struct device_attribute *attr,
 		LDBG(curlun, "eject attempt prevented\n");
 		return -EBUSY;				// "Door is locked"
 	}
+	
+	if (count >= MAX_FNAME_LEN) {
+		ERROR(fsg, "Filename too long\n");
+		return -EINVAL;
+	}
 
 	/* Remove a trailing newline */
 	if (count > 0 && buf[count-1] == '\n')
 		((char *) buf)[count-1] = 0;		// Ugh!
 
-	/* Eject current medium */
-	down_write(&fsg->filesem);
-	if (backing_file_is_open(curlun)) {
-		close_backing_file(curlun);
-		curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
-	}
 
-	/* Load new medium */
-	if (count > 0 && buf[0]) {
-		rc = open_backing_file(curlun, buf);
-		if (rc == 0)
-			curlun->unit_attention_data =
-					SS_NOT_READY_TO_READY_TRANSITION;
+	/* Change the filename */
+	down_write(&fsg->filesem);
+	if (curlun->enabled) {
+		LDBG(curlun, "Can't change file while enbaled.\n");
+		rc = -EBUSY;
+	} else {
+		curlun->fname[0] = 0;
+		if (count > 0 && buf[0])
+			strcpy(&curlun->fname[0], buf);
 	}
 	up_write(&fsg->filesem);
 	return (rc < 0 ? rc : count);
 }
 
+static ssize_t store_locked(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	ssize_t		rc = count;
+	struct lun	*curlun = dev_to_lun(dev);
+	struct fsg_dev	*fsg = dev_get_drvdata(dev);
+	int		lockme;
+
+	if (sscanf(buf, "%d", &lockme) != 1)
+		return -EINVAL;
+	lockme = !!lockme;
+
+	if(lockme == curlun->locked)
+		return count;
+
+	if (curlun->prevent_medium_removal && backing_file_is_open(curlun)) {
+		LDBG(curlun, "eject attempt prevented\n");
+		return -EBUSY;
+	}
+
+	down_write(&fsg->filesem);
+	if (lockme) {
+		/* Eject current medium thus locking device */
+		if (backing_file_is_open(curlun)) {
+			fsync_sub(curlun);
+			close_backing_file(curlun);
+			curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
+		}
+	} else {
+		/* Unlock LUN */
+		if (curlun->fname[0] && curlun->enabled) {
+			rc = open_backing_file(curlun, curlun->fname);
+			if (rc == 0)
+				curlun->unit_attention_data =
+					SS_NOT_READY_TO_READY_TRANSITION;
+		}
+	}
+	curlun->locked = lockme;
+
+	up_write(&fsg->filesem);
+	return (rc < 0 ? rc : count);
+}
+
+static ssize_t store_enabled(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct lun	*curlun = dev_to_lun(dev);
+	struct fsg_dev	*fsg = dev_get_drvdata(dev);
+	int		rc = 0, enableme;
+	
+	if (sscanf(buf, "%d", &enableme) != 1)
+		return -EINVAL;
+	enableme = !!enableme;
+
+	if(enableme == curlun->enabled)
+		return count;
+
+	if (curlun->prevent_medium_removal && backing_file_is_open(curlun)) {
+		LDBG(curlun, "eject attempt prevented\n");
+		return -EBUSY;				// "Door is locked"
+	}
+
+	if (curlun->fname[0] == 0) {
+		ERROR(fsg, "Can't enable until file is set.\n");
+		return -EINVAL;
+	}
+
+	/* Eject current medium */
+	down_write(&fsg->filesem);
+	if (enableme) {
+		if(curlun->fname[0] == 0) {
+			/* we can't enable unless there's a filename */
+			rc = -EINVAL;
+		} else {
+			/* enable LUN */
+			if (!curlun->locked) {
+				rc = open_backing_file(curlun, curlun->fname);
+				if (rc == 0)
+					curlun->unit_attention_data =
+						SS_NOT_READY_TO_READY_TRANSITION;
+			}
+		}
+	} else {
+		/* Eject current medium thus disabling device */
+		if (backing_file_is_open(curlun)) {
+			fsync_sub(curlun);
+			close_backing_file(curlun);
+			curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
+		}
+	}
+	curlun->enabled = enableme;
+	up_write(&fsg->filesem);
+	return (rc < 0 ? rc : count);
+}
+
+static ssize_t store_needs_repair(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct lun	*curlun = dev_to_lun(dev);
+	int		needs_repair;
+	
+	if (sscanf(buf, "%d", &needs_repair) != 1)
+		return -EINVAL;
+	
+	needs_repair = !!needs_repair;
+
+	curlun->needs_repair = needs_repair;
+	return count;
+}
 
 /* The write permissions and store_xxx pointers are set in fsg_bind() */
 static DEVICE_ATTR(ro, 0444, show_ro, NULL);
 static DEVICE_ATTR(file, 0444, show_file, NULL);
-
+static DEVICE_ATTR(locked, 0644, show_locked, store_locked);
+static DEVICE_ATTR(enabled, 0644, show_enabled, store_enabled);
+static DEVICE_ATTR(disconnect, 0444, show_disconnect, NULL);
+static DEVICE_ATTR(needs_repair, 0644, show_needs_repair, store_needs_repair);
 
 /*-------------------------------------------------------------------------*/
 
@@ -3820,14 +4323,18 @@ static void /* __init_or_exit */ fsg_unbind(struct usb_gadget *gadget)
 	clear_bit(REGISTERED, &fsg->atomic_bitflags);
 
 	/* Unregister the sysfs attribute files and the LUNs */
+	device_remove_file(&gadget->dev, &dev_attr_disconnect);
 	for (i = 0; i < fsg->nluns; ++i) {
 		curlun = &fsg->luns[i];
 		if (curlun->registered) {
 			device_remove_file(&curlun->dev, &dev_attr_ro);
 			device_remove_file(&curlun->dev, &dev_attr_file);
-			close_backing_file(curlun);
+			device_remove_file(&gadget->dev, &dev_attr_locked);
+			device_remove_file(&gadget->dev, &dev_attr_enabled);
+			device_remove_file(&gadget->dev, &dev_attr_needs_repair);
 			device_unregister(&curlun->dev);
 			curlun->registered = 0;
+			curlun->fname[0] = 0;
 		}
 	}
 
@@ -3961,6 +4468,8 @@ static int __init fsg_bind(struct usb_gadget *gadget)
 	if ((rc = check_parameters(fsg)) != 0)
 		goto out;
 
+	fsg->disconnect_ok = 1;
+
 	if (mod_data.removable) {	// Enable the store_xxx attributes
 		dev_attr_file.attr.mode = 0644;
 		dev_attr_file.store = store_file;
@@ -3988,12 +4497,18 @@ static int __init fsg_bind(struct usb_gadget *gadget)
 		goto out;
 	}
 	fsg->nluns = i;
+	if ((rc = device_create_file(&gadget->dev,
+				     &dev_attr_disconnect)) != 0)
+		goto out;
 
 	for (i = 0; i < fsg->nluns; ++i) {
 		curlun = &fsg->luns[i];
 		curlun->ro = mod_data.ro[i];
 		if (mod_data.cdrom)
 			curlun->ro = 1;
+		curlun->locked = mod_data.locked[i];
+		curlun->enabled = mod_data.enabled[i];
+		curlun->needs_repair=mod_data.needs_repair[i];
 		curlun->dev.release = lun_release;
 		curlun->dev.parent = &gadget->dev;
 		curlun->dev.driver = &fsg_driver.driver;
@@ -4008,21 +4523,46 @@ static int __init fsg_bind(struct usb_gadget *gadget)
 		if ((rc = device_create_file(&curlun->dev,
 					&dev_attr_ro)) != 0 ||
 				(rc = device_create_file(&curlun->dev,
-					&dev_attr_file)) != 0) {
+					&dev_attr_file)) != 0 ||
+		    (rc = device_create_file(&curlun->dev,
+					     &dev_attr_locked)) != 0 ||
+		    (rc = device_create_file(&curlun->dev,
+					     &dev_attr_enabled)) != 0 ||
+		    (rc = device_create_file(&curlun->dev,
+					     &dev_attr_needs_repair))) {
 			device_unregister(&curlun->dev);
 			goto out;
 		}
 		curlun->registered = 1;
 		kref_get(&fsg->ref);
 
+		curlun->fname[0] = 0;
 		if (mod_data.file[i] && *mod_data.file[i]) {
-			if ((rc = open_backing_file(curlun,
-					mod_data.file[i])) != 0)
+			if (strlen(mod_data.file[i]) >= MAX_FNAME_LEN) {
+				ERROR(fsg, "Filename too long for LUN%d\n", i);
+				rc = -EINVAL;
 				goto out;
-		} else if (!mod_data.removable) {
+			} else {
+				strcpy(&curlun->fname[0], mod_data.file[i]);
+			}
+		}
+
+		if ( !(curlun->fname[0]) && (curlun->enabled) ) {
+			ERROR(fsg, "Can't enable LUN%d without file\n", i);
+			rc = -EINVAL;
+			goto out;
+		}
+		
+		if ( !(curlun->fname[0]) && !mod_data.removable ) {
 			ERROR(fsg, "no file given for LUN%d\n", i);
 			rc = -EINVAL;
 			goto out;
+		}
+
+		if (curlun->enabled && !curlun->locked) {
+			rc = open_backing_file(curlun, curlun->fname);
+			if (rc != 0)
+				goto out;
 		}
 	}
 
@@ -4109,16 +4649,9 @@ static int __init fsg_bind(struct usb_gadget *gadget)
 	snprintf(manufacturer, sizeof manufacturer, "%s %s with %s",
 			init_utsname()->sysname, init_utsname()->release,
 			gadget->name);
-
-	/* On a real device, serial[] would be loaded from permanent
-	 * storage.  We just encode it from the driver version string. */
-	for (i = 0; i < sizeof(serial) - 2; i += 2) {
-		unsigned char		c = DRIVER_VERSION[i / 2];
-
-		if (!c)
-			break;
-		sprintf(&serial[i], "%02X", c);
-	}
+	serial_len = sizeof(serial_no_null)>strlen(mod_data.serial)?
+		strlen(mod_data.serial):sizeof(serial_no_null);
+	memcpy(serial_no_null, mod_data.serial, serial_len);
 
 	fsg->thread_task = kthread_create(fsg_main_thread, fsg,
 			"file-storage-gadget");
@@ -4194,6 +4727,11 @@ static void fsg_resume(struct usb_gadget *gadget)
 	clear_bit(SUSPENDED, &fsg->atomic_bitflags);
 }
 
+void fsg_vbus_session(struct usb_gadget *gadget, int is_active)
+{
+	struct fsg_dev		*fsg = get_gadget_data(gadget);
+	fsg->disconnect_ok = !is_active;
+}
 
 /*-------------------------------------------------------------------------*/
 
@@ -4218,6 +4756,8 @@ static struct usb_gadget_driver		fsg_driver = {
 		// .suspend = ...
 		// .resume = ...
 	},
+	.vbus_session	= fsg_vbus_session,
+	.is_enabled	= fsg_enabled,
 };
 
 
@@ -4242,6 +4782,19 @@ static int __init fsg_init(void)
 {
 	int		rc;
 	struct fsg_dev	*fsg;
+	
+#ifdef USE_LEAPFROG_USB_DATA
+	if( gpio_have_gpio_madrid() )
+	{
+		mod_data.product = DRIVER_PRODUCT_ID_MADRID;
+		strcpy(product_id, PRODUCT_STRING_MADRID);
+	}
+	else if( gpio_have_gpio_emerald() )
+	{
+		mod_data.product = DRIVER_PRODUCT_ID_EMERALD;
+		strcpy(product_id, PRODUCT_STRING_EMERALD);
+	}
+#endif /* USE_LEAPFROG_USB_DATA */
 
 	if ((rc = fsg_alloc()) != 0)
 		return rc;

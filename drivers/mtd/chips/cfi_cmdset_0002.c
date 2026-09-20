@@ -52,6 +52,8 @@
 #define SST49LF008A		0x005a
 #define AT49BV6416		0x00d6
 
+#define WAIT_TIDA		150	// wait 150ns after reset
+
 static int cfi_amdstd_read (struct mtd_info *, loff_t, size_t, size_t *, u_char *);
 static int cfi_amdstd_write_words(struct mtd_info *, loff_t, size_t, size_t *, const u_char *);
 static int cfi_amdstd_write_buffers(struct mtd_info *, loff_t, size_t, size_t *, const u_char *);
@@ -82,7 +84,14 @@ static struct mtd_chip_driver cfi_amdstd_chipdrv = {
 };
 
 
-/* #define DEBUG_CFI_FEATURES */
+/* Protect NOR from accidental erasure: addresses LOWER than this
+ * address are blocked from erase or write commands and will return
+ * -EPERM.  See ../nand/lf1000.c for the sysfs entry that controls
+ * this.
+ */
+extern u32 nor_write_addr_threshold;
+
+#define DEBUG_CFI_FEATURES
 
 
 #ifdef DEBUG_CFI_FEATURES
@@ -979,7 +988,7 @@ static inline int do_read_secsi_onechip(struct map_info *map, struct flchip *chi
 	spin_lock(chip->mutex);
 
 	if (chip->state != FL_READY){
-#if 0
+#if 1
 		printk(KERN_DEBUG "Waiting for chip to read, status = %d\n", chip->state);
 #endif
 		set_current_state(TASK_UNINTERRUPTIBLE);
@@ -1114,6 +1123,7 @@ static int __xipram do_write_oneword(struct map_info *map, struct flchip *chip, 
 	cfi_send_gen_cmd(0x55, cfi->addr_unlock2, chip->start, map, cfi, cfi->device_type, NULL);
 	cfi_send_gen_cmd(0xA0, cfi->addr_unlock1, chip->start, map, cfi, cfi->device_type, NULL);
 	map_write(map, datum, adr);
+	cfi_udelay(1);
 	chip->state = FL_WRITING;
 
 	INVALIDATE_CACHE_UDELAY(map, chip,
@@ -1154,7 +1164,7 @@ static int __xipram do_write_oneword(struct map_info *map, struct flchip *chip, 
 	if (!chip_good(map, adr, datum)) {
 		/* reset on all failures. */
 		map_write( map, CMD(0xF0), chip->start );
-		/* FIXME - should have reset delay before continuing */
+		ndelay(WAIT_TIDA);	// delay after reset
 
 		if (++retry_cnt <= MAX_WORD_RETRIES)
 			goto retry;
@@ -1185,6 +1195,11 @@ static int cfi_amdstd_write_words(struct mtd_info *mtd, loff_t to, size_t len,
 	if (!len)
 		return 0;
 
+	/* Protect NOR from accidental erasure/writes: addresses
+	   LOWER than this fail*/
+	if (to < nor_write_addr_threshold)
+		return -EPERM;
+
 	chipnum = to >> cfi->chipshift;
 	ofs = to  - (chipnum << cfi->chipshift);
 	chipstart = cfi->chips[chipnum].start;
@@ -1200,7 +1215,7 @@ static int cfi_amdstd_write_words(struct mtd_info *mtd, loff_t to, size_t len,
 		spin_lock(cfi->chips[chipnum].mutex);
 
 		if (cfi->chips[chipnum].state != FL_READY) {
-#if 0
+#if 1
 			printk(KERN_DEBUG "Waiting for chip to write, status = %d\n", cfi->chips[chipnum].state);
 #endif
 			set_current_state(TASK_UNINTERRUPTIBLE);
@@ -1278,7 +1293,7 @@ static int cfi_amdstd_write_words(struct mtd_info *mtd, loff_t to, size_t len,
 		spin_lock(cfi->chips[chipnum].mutex);
 
 		if (cfi->chips[chipnum].state != FL_READY) {
-#if 0
+#if 1
 			printk(KERN_DEBUG "Waiting for chip to write, status = %d\n", cfi->chips[chipnum].state);
 #endif
 			set_current_state(TASK_UNINTERRUPTIBLE);
@@ -1413,7 +1428,7 @@ static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
 	/* reset on all failures. */
 	map_write( map, CMD(0xF0), chip->start );
 	xip_enable(map, chip, adr);
-	/* FIXME - should have reset delay before continuing */
+	ndelay(WAIT_TIDA);	// delay after reset
 
 	printk(KERN_WARNING "MTD %s(): software timeout\n",
 	       __func__ );
@@ -1587,7 +1602,7 @@ static int __xipram do_erase_chip(struct map_info *map, struct flchip *chip)
 	if (!chip_good(map, adr, map_word_ff(map))) {
 		/* reset on all failures. */
 		map_write( map, CMD(0xF0), chip->start );
-		/* FIXME - should have reset delay before continuing */
+		ndelay(WAIT_TIDA);	// delay after reset
 
 		ret = -EIO;
 	}
@@ -1695,6 +1710,11 @@ static int cfi_amdstd_erase_varsize(struct mtd_info *mtd, struct erase_info *ins
 	unsigned long ofs, len;
 	int ret;
 
+	/* Protect NOR from accidental erasure: addresses LOWER than
+	   this fail*/
+	if (instr->addr < nor_write_addr_threshold)
+		return -EPERM;
+
 	ofs = instr->addr;
 	len = instr->len;
 
@@ -1720,6 +1740,11 @@ static int cfi_amdstd_erase_chip(struct mtd_info *mtd, struct erase_info *instr)
 
 	if (instr->len != mtd->size)
 		return -EINVAL;
+
+	/* Protect NOR from accidental erasure: addresses LOWER than
+	   this fail*/
+	if (instr->addr < nor_write_addr_threshold)
+		return -EPERM;
 
 	ret = do_erase_chip(map, &cfi->chips[0]);
 	if (ret)

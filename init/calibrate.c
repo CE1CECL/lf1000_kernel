@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/timex.h>
 #include <linux/smp.h>
+#include <mach/platform.h>
 
 unsigned long lpj_fine;
 unsigned long preset_lpj;
@@ -124,6 +125,9 @@ void __cpuinit calibrate_delay(void)
 	unsigned long ticks, loopbit;
 	int lps_precision = LPS_PREC;
 
+#ifdef CONFIG_ARCH_LF1000
+	preset_lpj = get_pll_freq(CPU_PLL)/100;
+#endif
 	if (preset_lpj) {
 		loops_per_jiffy = preset_lpj;
 		printk(KERN_INFO

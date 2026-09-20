@@ -2018,6 +2018,10 @@ int usb_add_hcd(struct usb_hcd *hcd,
 	hcd->authorized_default = hcd->wireless? 0 : 1;
 	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
 
+#if 0   // 28aug09  just for debugging; boots ok when this is enabled
+    return -1;
+#endif  // 28aug09
+
 	/* HC is in reset state, but accessible.  Now do the one-time init,
 	 * bottom up so that hcds can customize the root hubs before khubd
 	 * starts talking to them.  (Note, bus id is assigned early too.)
@@ -2027,9 +2031,17 @@ int usb_add_hcd(struct usb_hcd *hcd,
 		return retval;
 	}
 
+#if 0   // 28aug09  just for debugging; boots ok when this is enabled
+    return -2;
+#endif  // 28aug09
+
 	if ((retval = usb_register_bus(&hcd->self)) < 0)
 		goto err_register_bus;
 
+#if 0   // 28aug09  just for debugging; boots ok when this is enabled
+    retval = -3;
+	goto err_register_bus;
+#endif  // 28aug09
 	if ((rhdev = usb_alloc_dev(NULL, &hcd->self, 0)) == NULL) {
 		dev_err(hcd->self.controller, "unable to allocate root hub\n");
 		retval = -ENOMEM;
@@ -2051,12 +2063,20 @@ int usb_add_hcd(struct usb_hcd *hcd,
 	}
 	hcd->self.root_hub = rhdev;
 
+#if 0   // 28aug09  just for debugging; boots ok when this is enabled
+    retval = -4;
+	goto err_hcd_driver_setup;
+#endif  // 28aug09
 	/* wakeup flag init defaults to "everything works" for root hubs,
 	 * but drivers can override it in reset() if needed, along with
 	 * recording the overall controller's system wakeup capability.
 	 */
 	device_init_wakeup(&rhdev->dev, 1);
 
+#if 0   // 28aug09  just for debugging; boots ok when this is enabled
+    retval = -5;
+	goto err_hcd_driver_setup;
+#endif  // 28aug09
 	/* "reset" is misnamed; its role is now one-time init. the controller
 	 * should already have been reset (and boot firmware kicked off etc).
 	 */
@@ -2070,6 +2090,10 @@ int usb_add_hcd(struct usb_hcd *hcd,
 			&& device_can_wakeup(&hcd->self.root_hub->dev))
 		dev_dbg(hcd->self.controller, "supports USB remote wakeup\n");
 
+#if 0   // 28aug09  just for debugging; boots ok when this is enabled
+    retval = -6;
+	goto err_hcd_driver_setup;
+#endif  // 28aug09
 	/* enable irqs just before we start the controller */
 	if (hcd->driver->irq) {
 
@@ -2101,12 +2125,22 @@ int usb_add_hcd(struct usb_hcd *hcd,
 					"io mem" : "io base",
 					(unsigned long long)hcd->rsrc_start);
 	}
+#if 0   // 28aug09  just for debugging; boots ok when this is enabled
+    retval = -7;
+	goto err_hcd_driver_start;
+#endif  // 28aug09
 
 	if ((retval = hcd->driver->start(hcd)) < 0) {
 		dev_err(hcd->self.controller, "startup error %d\n", retval);
 		goto err_hcd_driver_start;
 	}
 
+#if 0   // 28aug09  just for debugging;
+    retval = -8;
+	goto err_hcd_driver_start;
+#else
+printk("after hcd->driver->start\n");
+#endif  // 28aug09
 	/* starting here, usbcore will pay attention to this root hub */
 	rhdev->bus_mA = min(500u, hcd->power_budget);
 	if ((retval = register_root_hub(hcd)) != 0)
@@ -2120,24 +2154,48 @@ int usb_add_hcd(struct usb_hcd *hcd,
 	}
 	if (hcd->uses_new_polling && hcd->poll_rh)
 		usb_hcd_poll_rh_status(hcd);
+#if 1   //  30aug09
+printk("usb_add_hcd() returns %d\n", retval);
+#endif  // 30aug09
 	return retval;
 
 error_create_attr_group:
+#if 1   //  30aug09
+printk("usb_add_hcd: error_create_attr_group\n");
+#endif  // 30aug09
 	mutex_lock(&usb_bus_list_lock);
 	usb_disconnect(&hcd->self.root_hub);
 	mutex_unlock(&usb_bus_list_lock);
 err_register_root_hub:
+#if 1   //  30aug09
+printk("usb_add_hcd: err_register_root_hub\n");
+#endif  // 30aug09
 	hcd->driver->stop(hcd);
 err_hcd_driver_start:
+#if 1   //  30aug09
+printk("usb_add_hcd: err_hcd_driver_start\n");
+#endif  // 30aug09
 	if (hcd->irq >= 0)
 		free_irq(irqnum, hcd);
 err_request_irq:
+#if 1   //  30aug09
+printk("usb_add_hcd: err_request_irq\n");
+#endif  // 30aug09
 err_hcd_driver_setup:
+#if 1   //  30aug09
+printk("usb_add_hcd: err_driver_setup\n");
+#endif  // 30aug09
 	hcd->self.root_hub = NULL;
 	usb_put_dev(rhdev);
 err_allocate_root_hub:
+#if 1   //  30aug09
+printk("usb_add_hcd: err_allocate_root_hub\n");
+#endif  // 30aug09
 	usb_deregister_bus(&hcd->self);
 err_register_bus:
+#if 1   //  30aug09
+printk("usb_add_hcd: err_register_bus\n");
+#endif  // 30aug09
 	hcd_buffer_destroy(hcd);
 	return retval;
 } 

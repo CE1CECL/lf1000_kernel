@@ -169,6 +169,13 @@
 #define gadget_is_ci13xxx(g)	0
 #endif
 
+/* LF1000 USB controller */
+#ifdef CONFIG_USB_GADGET_LF1000
+#define gadget_is_lf1000(g)	!strcmp("lf1000_udc", (g)->name)
+#else
+#define gadget_is_lf1000(g)	0
+#endif
+
 // CONFIG_USB_GADGET_SX2
 // CONFIG_USB_GADGET_AU1X00
 // ...
@@ -239,6 +246,8 @@ static inline int usb_gadget_controller_number(struct usb_gadget *gadget)
 		return 0x23;
 	else if (gadget_is_langwell(gadget))
 		return 0x24;
+	else if (gadget_is_lf1000(gadget))
+		return 0x25;
 	return -ENOENT;
 }
 

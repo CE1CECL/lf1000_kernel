@@ -24,6 +24,7 @@
 
 #include <linux/kernel.h>
 #include <linux/utsname.h>
+#include <mach/gpio.h>
 
 #include "u_ether.h"
 
@@ -63,7 +64,16 @@
  * needlessly complex.  They borrow more from CDC ACM than CDC ECM.
  */
 
-#define DRIVER_DESC		"Ethernet Gadget"
+#define DRIVER_DESC		        "Ethernet Gadget"
+#ifdef CONFIG_ARCH_LF1000
+#define DRIVER_VERSION	        "Veterans Day 2009"
+#define PREFIX			        ""
+#define PRODUCT_ID_STRING       "Leapster Explorer"
+#define PRODUCT_ID_STRING_MADRID       "LeapPad Explorer"
+#define MANUFACTURER_ID_STRING  "LeapFrog Enterprises, Inc."
+#define SERIAL_ID_STRING	""
+#else   
+
 #define DRIVER_VERSION		"Memorial Day 2008"
 
 #ifdef CONFIG_USB_ETH_RNDIS
@@ -71,6 +81,8 @@
 #else
 #define PREFIX			""
 #endif
+
+#endif  // ndef CONFIG_ARCH_LF1000
 
 /*
  * This driver aims for interoperability by using CDC ECM unless
@@ -122,11 +134,19 @@ static inline bool has_rndis(void)
  * Instead:  allocate your own, using normal USB-IF procedures.
  */
 
+#ifdef CONFIG_ARCH_LF1000
+/* Match Belcarra Windows Driver */
+#define CDC_VENDOR_NUM		0x0f63	/* LeapFrog */
+#define CDC_PRODUCT_NUM		0x0010	/* Linux-USB Ethernet Gadget */
+#define CDC_PRODUCT_NUM_MADRID		0x0011
+
+#else
 /* Thanks to NetChip Technologies for donating this product ID.
  * It's for devices with only CDC Ethernet configurations.
  */
 #define CDC_VENDOR_NUM		0x0525	/* NetChip */
 #define CDC_PRODUCT_NUM		0xa4a1	/* Linux-USB Ethernet Gadget */
+#endif
 
 /* For hardware that can't talk CDC, we use the same vendor ID that
  * ARM Linux has used for ethernet-over-usb, both with sa1100 and
@@ -196,7 +216,16 @@ static const struct usb_descriptor_header *otg_desc[] = {
 
 #define STRING_MANUFACTURER_IDX		0
 #define STRING_PRODUCT_IDX		1
+#define STRING_SERIAL_IDX		2
 
+#ifdef CONFIG_ARCH_LF1000
+static struct usb_string strings_dev[] = {
+	[STRING_MANUFACTURER_IDX].s = MANUFACTURER_ID_STRING,
+	[STRING_PRODUCT_IDX].s      = PRODUCT_ID_STRING,
+	[STRING_SERIAL_IDX].s	    = SERIAL_ID_STRING,
+	{  } /* end of list */
+};
+#else
 static char manufacturer[50];
 
 static struct usb_string strings_dev[] = {
@@ -204,6 +233,7 @@ static struct usb_string strings_dev[] = {
 	[STRING_PRODUCT_IDX].s = PREFIX DRIVER_DESC,
 	{  } /* end of list */
 };
+#endif
 
 static struct usb_gadget_strings stringtab_dev = {
 	.language	= 0x0409,	/* en-us */
@@ -252,7 +282,6 @@ static struct usb_configuration rndis_config_driver = {
 static int __init eth_do_config(struct usb_configuration *c)
 {
 	/* FIXME alloc iConfiguration string, set it in c->strings */
-
 	if (gadget_is_otg(c->cdev->gadget)) {
 		c->descriptors = otg_desc;
 		c->bmAttributes |= USB_CONFIG_ATT_WAKEUP;
@@ -289,6 +318,13 @@ static int __init eth_bind(struct usb_composite_dev *cdev)
 	if (can_support_ecm(cdev->gadget)) {
 		/* ECM */
 		eth_config_driver.label = "CDC Ethernet (ECM)";
+		/* Override product name and product ID for madrid */
+		if(gpio_have_gpio_madrid())
+		{
+			device_desc.idProduct = cpu_to_le16(CDC_PRODUCT_NUM_MADRID);
+			strings_dev[STRING_PRODUCT_IDX].s = PRODUCT_ID_STRING_MADRID;
+		}
+			
 	} else {
 		/* CDC Subset */
 		eth_config_driver.label = "CDC Subset/SAFE";
@@ -328,14 +364,22 @@ static int __init eth_bind(struct usb_composite_dev *cdev)
 	 */
 
 	/* device descriptor strings: manufacturer, product */
+#ifndef CONFIG_ARCH_LF1000
 	snprintf(manufacturer, sizeof manufacturer, "%s %s with %s",
 		init_utsname()->sysname, init_utsname()->release,
 		gadget->name);
+#endif
 	status = usb_string_id(cdev);
 	if (status < 0)
 		goto fail;
 	strings_dev[STRING_MANUFACTURER_IDX].id = status;
 	device_desc.iManufacturer = status;
+
+	status = usb_string_id(cdev);
+	if (status < 0)
+		goto fail;
+	strings_dev[STRING_SERIAL_IDX].id = status;
+	device_desc.iSerialNumber = status;
 
 	status = usb_string_id(cdev);
 	if (status < 0)

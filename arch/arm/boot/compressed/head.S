@@ -162,6 +162,13 @@ not_angel:
 		.text
 		adr	r0, LC0
 		ldmia	r0, {r1, r2, r3, r4, r5, r6, ip, sp}
+
+#ifdef CONFIG_RUNTIME_PHYS_OFFSET
+		and	r10, pc, #0xf0000000	@ fix up zreladdr at runtime
+		and	r4, r4,  #0x0fffffff
+		add	r4, r4, r10
+#endif
+
 		subs	r0, r0, r1		@ calculate the delta offset
 
 						@ if delta is zero, we are

@@ -343,6 +343,8 @@ static struct mtd_part *add_one_partition(struct mtd_info *master,
 	}
 	list_add(&slave->list, &mtd_partitions);
 
+	slave->mtd.priv = master->priv;
+	
 	/* set up the MTD object for this partition */
 	slave->mtd.type = master->type;
 	slave->mtd.flags = master->flags & ~part->mask_flags;

@@ -83,6 +83,12 @@ tune-$(CONFIG_CPU_XSC3)		:=$(call cc-option,-mtune=xscale,-mtune=strongarm110) -
 tune-$(CONFIG_CPU_FEROCEON)	:=$(call cc-option,-mtune=marvell-f,-mtune=xscale)
 tune-$(CONFIG_CPU_V6)		:=$(call cc-option,-mtune=arm1136j-s,-mtune=strongarm)
 
+# tune for LF1000 ARM926T processor
+ifeq ($(CONFIG_ARCH_LF1000),y)
+arch-y :=-D__LINUX_ARM_ARCH__=5
+tune-y :=-mcpu=arm926ej-s
+endif
+
 ifeq ($(CONFIG_AEABI),y)
 CFLAGS_ABI	:=-mabi=aapcs-linux -mno-thumb-interwork
 else
@@ -128,6 +134,7 @@ machine-$(CONFIG_ARCH_IXP4XX)		:= ixp4xx
 machine-$(CONFIG_ARCH_KIRKWOOD)		:= kirkwood
 machine-$(CONFIG_ARCH_KS8695)		:= ks8695
 machine-$(CONFIG_ARCH_L7200)		:= l7200
+machine-$(CONFIG_ARCH_LF1000)		:= lf1000
 machine-$(CONFIG_ARCH_LH7A40X)		:= lh7a40x
 machine-$(CONFIG_ARCH_LOKI) 		:= loki
 machine-$(CONFIG_ARCH_MMP)		:= mmp
@@ -169,6 +176,7 @@ plat-$(CONFIG_PLAT_PXA)		:= pxa
 plat-$(CONFIG_PLAT_S3C24XX)	:= s3c24xx s3c
 plat-$(CONFIG_PLAT_S3C64XX)	:= s3c64xx s3c
 plat-$(CONFIG_ARCH_STMP3XXX)	:= stmp3xxx
+plat-$(CONFIG_PLAT_MES)		:= mes
 
 ifeq ($(CONFIG_ARCH_EBSA110),y)
 # This is what happens if you forget the IOCS16 line.

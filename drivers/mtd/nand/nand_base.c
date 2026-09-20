@@ -52,8 +52,15 @@
 #include <linux/mtd/partitions.h>
 #endif
 
+#ifdef CONFIG_MTD_NAND_LF1000_PROF
+#include "prof.h"
+#endif
+
 /* Define default oob placement schemes for large and small page devices */
-static struct nand_ecclayout nand_oob_8 = {
+#ifndef CPU_LF1000
+static 
+#endif
+struct nand_ecclayout nand_oob_8 = {
 	.eccbytes = 3,
 	.eccpos = {0, 1, 2},
 	.oobfree = {
@@ -63,7 +70,10 @@ static struct nand_ecclayout nand_oob_8 = {
 		 .length = 2}}
 };
 
-static struct nand_ecclayout nand_oob_16 = {
+#ifndef CPU_LF1000
+static 
+#endif
+struct nand_ecclayout nand_oob_16 = {
 	.eccbytes = 6,
 	.eccpos = {0, 1, 2, 3, 6, 7},
 	.oobfree = {
@@ -71,7 +81,10 @@ static struct nand_ecclayout nand_oob_16 = {
 		 . length = 8}}
 };
 
-static struct nand_ecclayout nand_oob_64 = {
+#ifndef CPU_LF1000
+static 
+#endif
+struct nand_ecclayout nand_oob_64 = {
 	.eccbytes = 24,
 	.eccpos = {
 		   40, 41, 42, 43, 44, 45, 46, 47,
@@ -82,7 +95,10 @@ static struct nand_ecclayout nand_oob_64 = {
 		 .length = 38}}
 };
 
-static struct nand_ecclayout nand_oob_128 = {
+#ifndef CPU_LF1000
+static 
+#endif
+struct nand_ecclayout nand_oob_128 = {
 	.eccbytes = 48,
 	.eccpos = {
 		   80, 81, 82, 83, 84, 85, 86, 87,
@@ -96,10 +112,16 @@ static struct nand_ecclayout nand_oob_128 = {
 		 .length = 78}}
 };
 
-static int nand_get_device(struct nand_chip *chip, struct mtd_info *mtd,
+#ifndef CPU_LF1000
+static 
+#endif
+int nand_get_device(struct nand_chip *chip, struct mtd_info *mtd,
 			   int new_state);
 
-static int nand_do_write_oob(struct mtd_info *mtd, loff_t to,
+#ifndef CPU_LF1000
+static 
+#endif
+int nand_do_write_oob(struct mtd_info *mtd, loff_t to,
 			     struct mtd_oob_ops *ops);
 
 /*
@@ -114,7 +136,10 @@ DEFINE_LED_TRIGGER(nand_led_trigger);
  *
  * Deselect, release chip lock and wake up anyone waiting on the device
  */
-static void nand_release_device(struct mtd_info *mtd)
+#ifndef CPU_LF1000
+static
+#endif
+void nand_release_device(struct mtd_info *mtd)
 {
 	struct nand_chip *chip = mtd->priv;
 
@@ -127,6 +152,11 @@ static void nand_release_device(struct mtd_info *mtd)
 	chip->state = FL_READY;
 	wake_up(&chip->controller->wq);
 	spin_unlock(&chip->controller->lock);
+
+#ifdef CONFIG_MTD_NAND_LF1000_PROF
+	nand_stats_accum (NS_LOCK, 0);
+#endif
+
 }
 
 /**
@@ -224,6 +254,7 @@ static void nand_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
 		buf[i] = readb(chip->IO_ADDR_R);
 }
 
+
 /**
  * nand_verify_buf - [DEFAULT] Verify chip data against buffer
  * @mtd:	MTD device structure
@@ -238,7 +269,7 @@ static int nand_verify_buf(struct mtd_info *mtd, const uint8_t *buf, int len)
 	struct nand_chip *chip = mtd->priv;
 
 	for (i = 0; i < len; i++)
-		if (buf[i] != readb(chip->IO_ADDR_R))
+		if (buf[i] != readb(chip->IO_ADDR_R)) 
 			return -EFAULT;
 	return 0;
 }
@@ -398,7 +429,10 @@ static int nand_default_block_markbad(struct mtd_info *mtd, loff_t ofs)
  *
  * The function expects, that the device is already selected
  */
-static int nand_check_wp(struct mtd_info *mtd)
+#ifndef CPU_LF1000
+static 
+#endif
+int nand_check_wp(struct mtd_info *mtd)
 {
 	struct nand_chip *chip = mtd->priv;
 	/* Check the WP bit */
@@ -416,7 +450,10 @@ static int nand_check_wp(struct mtd_info *mtd)
  * Check, if the block is bad. Either by reading the bad block table or
  * calling of the scan function.
  */
-static int nand_block_checkbad(struct mtd_info *mtd, loff_t ofs, int getchip,
+#ifndef CPU_LF1000
+static 
+#endif
+int nand_block_checkbad(struct mtd_info *mtd, loff_t ofs, int getchip,
 			       int allowbbt)
 {
 	struct nand_chip *chip = mtd->priv;
@@ -434,17 +471,22 @@ static int nand_block_checkbad(struct mtd_info *mtd, loff_t ofs, int getchip,
  */
 void nand_wait_ready(struct mtd_info *mtd)
 {
+	int timeout=1;
 	struct nand_chip *chip = mtd->priv;
 	unsigned long timeo = jiffies + 2;
 
 	led_trigger_event(nand_led_trigger, LED_FULL);
 	/* wait until command is processed or timeout occures */
 	do {
-		if (chip->dev_ready(mtd))
+		if (chip->dev_ready(mtd)) {
+			timeout=0;
 			break;
+		}
 		touch_softlockup_watchdog();
 	} while (time_before(jiffies, timeo));
 	led_trigger_event(nand_led_trigger, LED_OFF);
+	
+	if(timeout) printk(KERN_WARNING "nand_wait_ready(...) timeout !\n");	
 }
 EXPORT_SYMBOL_GPL(nand_wait_ready);
 
@@ -459,7 +501,7 @@ EXPORT_SYMBOL_GPL(nand_wait_ready);
  * devices (256/512 Bytes per page)
  */
 static void nand_command(struct mtd_info *mtd, unsigned int command,
-			 int column, int page_addr)
+		            	 int column, int page_addr)
 {
 	register struct nand_chip *chip = mtd->priv;
 	int ctrl = NAND_CTRL_CLE | NAND_CTRL_CHANGE;
@@ -562,7 +604,7 @@ static void nand_command(struct mtd_info *mtd, unsigned int command,
  * devices.  We must emulate NAND_CMD_READOOB to keep the code compatible.
  */
 static void nand_command_lp(struct mtd_info *mtd, unsigned int command,
-			    int column, int page_addr)
+		            	    int column, int page_addr)
 {
 	register struct nand_chip *chip = mtd->priv;
 
@@ -679,7 +721,10 @@ static void nand_command_lp(struct mtd_info *mtd, unsigned int command,
  *
  * Get the device and lock it for exclusive access
  */
-static int
+#ifndef CPU_LF1000
+static
+#endif
+int
 nand_get_device(struct nand_chip *chip, struct mtd_info *mtd, int new_state)
 {
 	spinlock_t *lock = &chip->controller->lock;
@@ -696,6 +741,9 @@ nand_get_device(struct nand_chip *chip, struct mtd_info *mtd, int new_state)
 	if (chip->controller->active == chip && chip->state == FL_READY) {
 		chip->state = new_state;
 		spin_unlock(lock);
+#ifdef CONFIG_MTD_NAND_LF1000_PROF
+		nand_stats_accum (NS_LOCK, 1);
+#endif
 		return 0;
 	}
 	if (new_state == FL_PM_SUSPENDED) {
@@ -765,8 +813,11 @@ static int nand_wait(struct mtd_info *mtd, struct nand_chip *chip)
  *
  * Not for syndrome calculating ecc controllers, which use a special oob layout
  */
-static int nand_read_page_raw(struct mtd_info *mtd, struct nand_chip *chip,
-			      uint8_t *buf)
+#ifndef CPU_LF1000
+static
+#endif
+int nand_read_page_raw(struct mtd_info *mtd, struct nand_chip *chip,
+    			       uint8_t *buf)
 {
 	chip->read_buf(mtd, buf, mtd->writesize);
 	chip->read_buf(mtd, chip->oob_poi, mtd->oobsize);
@@ -862,7 +913,14 @@ static int nand_read_page_swecc(struct mtd_info *mtd, struct nand_chip *chip,
  * @readlen:	data length
  * @bufpoi:	buffer to store read data
  */
-static int nand_read_subpage(struct mtd_info *mtd, struct nand_chip *chip, uint32_t data_offs, uint32_t readlen, uint8_t *bufpoi)
+#ifndef CPU_LF1000
+static
+#endif
+int nand_read_subpage(struct mtd_info *mtd, 
+                      struct nand_chip *chip, 
+                      uint32_t data_offs, 
+                      uint32_t readlen, 
+                      uint8_t *bufpoi)
 {
 	int start_step, end_step, num_steps;
 	uint32_t *eccpos = chip->ecc.layout->eccpos;
@@ -1040,8 +1098,11 @@ static int nand_read_page_syndrome(struct mtd_info *mtd, struct nand_chip *chip,
  * @ops:	oob ops structure
  * @len:	size of oob to transfer
  */
-static uint8_t *nand_transfer_oob(struct nand_chip *chip, uint8_t *oob,
-				  struct mtd_oob_ops *ops, size_t len)
+#ifndef CPU_LF1000
+static
+#endif
+uint8_t *nand_transfer_oob(struct nand_chip *chip, uint8_t *oob,
+         				   struct mtd_oob_ops *ops, size_t len)
 {
 	switch(ops->mode) {
 
@@ -1230,7 +1291,7 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
  * Get hold of the chip and call nand_do_read
  */
 static int nand_read(struct mtd_info *mtd, loff_t from, size_t len,
-		     size_t *retlen, uint8_t *buf)
+		             size_t *retlen, uint8_t *buf)
 {
 	struct nand_chip *chip = mtd->priv;
 	int ret;
@@ -1263,7 +1324,10 @@ static int nand_read(struct mtd_info *mtd, loff_t from, size_t len,
  * @page:	page number to read
  * @sndcmd:	flag whether to issue read command or not
  */
-static int nand_read_oob_std(struct mtd_info *mtd, struct nand_chip *chip,
+#ifndef CPU_LF1000
+static
+#endif
+int nand_read_oob_std(struct mtd_info *mtd, struct nand_chip *chip,
 			     int page, int sndcmd)
 {
 	if (sndcmd) {
@@ -1319,8 +1383,10 @@ static int nand_read_oob_syndrome(struct mtd_info *mtd, struct nand_chip *chip,
  * @chip:	nand chip info structure
  * @page:	page number to write
  */
-static int nand_write_oob_std(struct mtd_info *mtd, struct nand_chip *chip,
-			      int page)
+#ifndef CPU_LF1000
+static
+#endif
+int nand_write_oob_std(struct mtd_info *mtd, struct nand_chip *chip, int page)
 {
 	int status = 0;
 	const uint8_t *buf = chip->oob_poi;
@@ -1403,8 +1469,10 @@ static int nand_write_oob_syndrome(struct mtd_info *mtd,
  *
  * NAND read out-of-band data from the spare area
  */
-static int nand_do_read_oob(struct mtd_info *mtd, loff_t from,
-			    struct mtd_oob_ops *ops)
+#ifndef CPU_LF1000
+static
+#endif
+int nand_do_read_oob(struct mtd_info *mtd, loff_t from, struct mtd_oob_ops *ops)
 {
 	int page, realpage, chipnr, sndcmd = 1;
 	struct nand_chip *chip = mtd->priv;
@@ -1497,7 +1565,7 @@ static int nand_do_read_oob(struct mtd_info *mtd, loff_t from,
  * NAND read data and/or out-of-band data
  */
 static int nand_read_oob(struct mtd_info *mtd, loff_t from,
-			 struct mtd_oob_ops *ops)
+		            	 struct mtd_oob_ops *ops)
 {
 	struct nand_chip *chip = mtd->priv;
 	int ret = -ENOTSUPP;
@@ -1542,8 +1610,11 @@ static int nand_read_oob(struct mtd_info *mtd, loff_t from,
  *
  * Not for syndrome calculating ecc controllers, which use a special oob layout
  */
-static void nand_write_page_raw(struct mtd_info *mtd, struct nand_chip *chip,
-				const uint8_t *buf)
+#ifndef CPU_LF1000
+static
+#endif
+void nand_write_page_raw(struct mtd_info *mtd, struct nand_chip *chip,
+        				 const uint8_t *buf)
 {
 	chip->write_buf(mtd, buf, mtd->writesize);
 	chip->write_buf(mtd, chip->oob_poi, mtd->oobsize);
@@ -1587,6 +1658,7 @@ static void nand_write_page_raw_syndrome(struct mtd_info *mtd, struct nand_chip 
 	if (size)
 		chip->write_buf(mtd, oob, size);
 }
+
 /**
  * nand_write_page_swecc - [REPLACABLE] software ecc based page write function
  * @mtd:	mtd info structure
@@ -1748,7 +1820,7 @@ static int nand_write_page(struct mtd_info *mtd, struct nand_chip *chip,
  * @ops:	oob ops structure
  */
 static uint8_t *nand_fill_oob(struct nand_chip *chip, uint8_t *oob,
-				  struct mtd_oob_ops *ops)
+			      struct mtd_oob_ops *ops)
 {
 	size_t len = ops->ooblen;
 
@@ -1903,7 +1975,10 @@ static int nand_do_write_ops(struct mtd_info *mtd, loff_t to,
  *
  * NAND write with ECC
  */
-static int nand_write(struct mtd_info *mtd, loff_t to, size_t len,
+#ifndef CPU_LF1000
+static
+#endif
+int nand_write(struct mtd_info *mtd, loff_t to, size_t len,
 			  size_t *retlen, const uint8_t *buf)
 {
 	struct nand_chip *chip = mtd->priv;
@@ -1917,7 +1992,7 @@ static int nand_write(struct mtd_info *mtd, loff_t to, size_t len,
 
 	nand_get_device(chip, mtd, FL_WRITING);
 
-	chip->ops.len = len;
+	chip->ops.len	 = len;
 	chip->ops.datbuf = (uint8_t *)buf;
 	chip->ops.oobbuf = NULL;
 
@@ -1938,7 +2013,10 @@ static int nand_write(struct mtd_info *mtd, loff_t to, size_t len,
  *
  * NAND write out-of-band
  */
-static int nand_do_write_oob(struct mtd_info *mtd, loff_t to,
+#ifndef CPU_LF1000
+static
+#endif
+int nand_do_write_oob(struct mtd_info *mtd, loff_t to,
 			     struct mtd_oob_ops *ops)
 {
 	int chipnr, page, status, len;
@@ -2016,7 +2094,10 @@ static int nand_do_write_oob(struct mtd_info *mtd, loff_t to,
  * @to:		offset to write to
  * @ops:	oob operation description structure
  */
-static int nand_write_oob(struct mtd_info *mtd, loff_t to,
+#ifndef CPU_LF1000
+static 
+#endif
+int nand_write_oob(struct mtd_info *mtd, loff_t to,
 			  struct mtd_oob_ops *ops)
 {
 	struct nand_chip *chip = mtd->priv;
@@ -2288,7 +2369,10 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
  *
  * Sync is actually a wait for chip ready function
  */
-static void nand_sync(struct mtd_info *mtd)
+#ifndef CPU_LF1000
+static 
+#endif
+void nand_sync(struct mtd_info *mtd)
 {
 	struct nand_chip *chip = mtd->priv;
 
@@ -2305,7 +2389,10 @@ static void nand_sync(struct mtd_info *mtd)
  * @mtd:	MTD device structure
  * @offs:	offset relative to mtd start
  */
-static int nand_block_isbad(struct mtd_info *mtd, loff_t offs)
+#ifndef CPU_LF1000
+static
+#endif
+int nand_block_isbad(struct mtd_info *mtd, loff_t offs)
 {
 	/* Check for invalid offset */
 	if (offs > mtd->size)
@@ -2319,7 +2406,10 @@ static int nand_block_isbad(struct mtd_info *mtd, loff_t offs)
  * @mtd:	MTD device structure
  * @ofs:	offset relative to mtd start
  */
-static int nand_block_markbad(struct mtd_info *mtd, loff_t ofs)
+#ifndef CPU_LF1000
+static
+#endif
+int nand_block_markbad(struct mtd_info *mtd, loff_t ofs)
 {
 	struct nand_chip *chip = mtd->priv;
 	int ret;
@@ -2338,7 +2428,10 @@ static int nand_block_markbad(struct mtd_info *mtd, loff_t ofs)
  * nand_suspend - [MTD Interface] Suspend the NAND flash
  * @mtd:	MTD device structure
  */
-static int nand_suspend(struct mtd_info *mtd)
+#ifndef CPU_LF1000
+static
+#endif
+int nand_suspend(struct mtd_info *mtd)
 {
 	struct nand_chip *chip = mtd->priv;
 
@@ -2349,7 +2442,10 @@ static int nand_suspend(struct mtd_info *mtd)
  * nand_resume - [MTD Interface] Resume the NAND flash
  * @mtd:	MTD device structure
  */
-static void nand_resume(struct mtd_info *mtd)
+#ifndef CPU_LF1000
+static
+#endif
+void nand_resume(struct mtd_info *mtd)
 {
 	struct nand_chip *chip = mtd->priv;
 
@@ -2418,6 +2514,9 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 	/* Select the device */
 	chip->select_chip(mtd, 0);
 
+	/* wait a little bit after reset to see if this helps ID read problem*/
+	mdelay(2);
+
 	/*
 	 * Reset the chip, required by some chips (e.g. Micron MT29FxGxxxxx)
 	 * after power-up
@@ -2431,12 +2530,15 @@ static struct nand_flash_dev *nand_get_flash_type(struct mtd_info *mtd,
 	*maf_id = chip->read_byte(mtd);
 	dev_id = chip->read_byte(mtd);
 
+	printk(KERN_INFO "%s(...): Manu_ID = %02x, Dev_ID = %02x \n",
+	       __func__, *maf_id, dev_id);
+	
 	/* Try again to make sure, as some systems the bus-hold or other
 	 * interface concerns can cause random data which looks like a
 	 * possibly credible NAND flash to appear. If the two results do
 	 * not match, ignore the device completely.
 	 */
-
+	mdelay(2);
 	chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
 
 	/* Read manufacturer and device IDs */
@@ -2697,7 +2799,7 @@ int nand_scan_tail(struct mtd_info *mtd)
 			       "Hardware ECC not possible\n");
 			BUG();
 		}
-		/* Use standard syndrome read/write page function ? */
+                /* Use standard syndrome read/write page function ? */
 		if (!chip->ecc.read_page)
 			chip->ecc.read_page = nand_read_page_syndrome;
 		if (!chip->ecc.write_page)

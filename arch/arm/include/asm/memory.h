@@ -70,6 +70,14 @@
  */
 #define IOREMAP_MAX_ORDER	24
 
+/*
+ * PHYS_OFFSET determined at run time?
+ */
+#if defined(CONFIG_RUNTIME_PHYS_OFFSET) && !defined(__ASSEMBLY__)
+extern unsigned long phys_offset;
+#define PHYS_OFFSET		(phys_offset)
+#endif
+
 #else /* CONFIG_MMU */
 
 /*

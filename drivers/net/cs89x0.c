@@ -154,6 +154,11 @@
 
 #include "cs89x0.h"
 
+/* IRQ on GPIO pin intead of EIRQ pin */
+#include <asm/arch/gpio.h>
+#define ETHER_GPIO_PORT		GPIO_PORT_B
+#define ETHER_GPIO_PIN		8
+
 static char version[] __initdata =
 "cs89x0.c: v2.4.3-pre1 Russell Nelson <nelson@crynwr.com>, Andrew Morton\n";
 
@@ -195,6 +200,9 @@ static unsigned int netcard_portlist[] __used __initdata = {
 	PBC_BASE_ADDRESS + PBC_CS8900A_IOBASE + 0x300, 0
 };
 static unsigned cs8900_irq_map[] = {EXPIO_INT_ENET_INT, 0, 0, 0};
+#elif defined(CONFIG_ARCH_LF1000)
+static unsigned int netcard_portlist[] __initdata = { IO_ADDRESS( LF1000_ETH_BASE), 0};
+static unsigned int cs8900_irq_map[] = {10,0,0,0};
 #else
 static unsigned int netcard_portlist[] __used __initdata =
    { 0x300, 0x320, 0x340, 0x360, 0x200, 0x220, 0x240, 0x260, 0x280, 0x2a0, 0x2c0, 0x2e0, 0};
@@ -316,9 +324,19 @@ struct net_device * __init cs89x0_probe(int unit)
 	int err = 0;
 	int irq;
 	int io;
+#if defined(CONFIG_ARCH_LF1000)
+	static char once = 0;	// LF1000 has only one ether limit to that
+	/* use nCS2 for chip select */
+	gpio_configure_pin(GPIO_PORT_C, 15, GPIO_ALT1, 1, 0, 0);
+#endif /* CONFIG_ARCH_LF1000 */
 
 	if (!dev)
 		return ERR_PTR(-ENODEV);
+
+#if defined(CONFIG_ARCH_LF1000)
+	if (once)
+		return ERR_PTR(-ENODEV);
+#endif
 
 	sprintf(dev->name, "eth%d", unit);
 	netdev_boot_setup_check(dev);
@@ -343,6 +361,9 @@ struct net_device * __init cs89x0_probe(int unit)
 	}
 	if (err)
 		goto out;
+#if defined(CONFIG_ARCH_LF1000)
+	once = 1;
+#endif
 	return dev;
 out:
 	free_netdev(dev);
@@ -573,6 +594,30 @@ cs89x0_probe1(struct net_device *dev, int ioaddr, int modular)
 		readreg(dev, 0);
 #endif
 
+#ifdef	CONFIG_ARCH_LF1000
+#ifdef CONFIG_MACH_ME_LF1000
+#define	LF1000_irq			13	/* GPIO pin */
+#else
+#define LF1000_irq			9	/* EIRQ pin */
+#endif
+
+#if	1
+	// set MAC to 00:01:02:03:04:05
+	for (i = 0; i < ETH_ALEN/2; i++) {
+		dev->dev_addr[i*2  ] = i*2;
+		dev->dev_addr[i*2+1] = i*2+1;
+	}
+#else
+{
+/* Borrowing it from U-Boot settings */
+unsigned char MACaddr[] = { 0x00, 0x50, 0xc2, 0x1e, 0xaf, 0xfb};
+	for (i = 0; i < ETH_ALEN/2; i++) {
+		dev->dev_addr[i*2  ] = MACaddr[i*2];
+		dev->dev_addr[i*2+1] = MACaddr[i*2+1];
+	}
+}
+#endif
+#endif
 	/* Grab the region so we can find another board if autoIRQ fails. */
 	/* WTF is going on here? */
 	if (!request_region(ioaddr & ~3, NETCARD_IO_EXTENT, DRV_NAME)) {
@@ -1292,7 +1337,15 @@ net_open(struct net_device *dev)
 
 		for (i = 2; i < CS8920_NO_INTS; i++) {
 			if ((1 << i) & lp->irq_map) {
+#ifndef	CONFIG_ARCH_LF1000
 				if (request_irq(i, net_interrupt, 0, dev->name, dev) == 0) {
+#else
+				#ifdef CONFIG_MACH_ME_LF1000 /* on GPIO */
+				if (gpio_request_normal_irq(ETHER_GPIO_PORT, ETHER_GPIO_PIN, net_interrupt, dev) == 0) {
+				#else /* on EIRQ */
+				if (request_irq( LF1000_irq, net_interrupt, SA_INTERRUPT, dev->name, dev) == 0) {
+				#endif
+#endif
 					dev->irq = i;
 					write_irq(dev, lp->chip_type, i);
 					/* writereg(dev, PP_BufCFG, GENERATE_SW_INTERRUPT); */
@@ -1326,10 +1379,22 @@ net_open(struct net_device *dev)
 		writereg(dev, PP_BusCTL, ENABLE_IRQ | MEMORY_ON);
 #endif
 		write_irq(dev, lp->chip_type, dev->irq);
+#ifndef	CONFIG_ARCH_LF1000
 		ret = request_irq(dev->irq, &net_interrupt, 0, dev->name, dev);
+#else
+		#ifdef CONFIG_MACH_ME_LF1000 /* on GPIO pin */
+		ret = gpio_request_normal_irq(ETHER_GPIO_PORT, ETHER_GPIO_PIN, net_interrupt, dev);
+		#else /* on EIRQ pin */
+		ret = request_irq( LF1000_irq, &net_interrupt, SA_INTERRUPT, dev->name, dev);
+		#endif
+#endif
 		if (ret) {
 			if (net_debug)
+#ifndef	CONFIG_ARCH_LF1000
 				printk(KERN_DEBUG "cs89x0: request_irq(%d) failed\n", dev->irq);
+#else
+				printk(KERN_DEBUG "cs89x0: request_irq(%d) failed\n", LF1000_irq);
+#endif
 			goto bad_out;
 		}
 	}
@@ -1408,7 +1473,11 @@ release_irq:
 		release_dma_buff(lp);
 #endif
                 writereg(dev, PP_LineCTL, readreg(dev, PP_LineCTL) & ~(SERIAL_TX_ON | SERIAL_RX_ON));
+#ifndef	CONFIG_ARCH_LF1000
                 free_irq(dev->irq, dev);
+#else
+                free_irq( LF1000_irq, dev);
+#endif
 		ret = -EAGAIN;
 		goto bad_out;
 	}
@@ -1416,12 +1485,16 @@ release_irq:
         /* set the hardware to the configured choice */
 	switch(lp->adapter_cnf & A_CNF_MEDIA_TYPE) {
 	case A_CNF_MEDIA_10B_T:
+#ifndef	CONFIG_ARCH_LF1000
                 result = detect_tp(dev);
                 if (result==DETECTED_NONE) {
                         printk(KERN_WARNING "%s: 10Base-T (RJ-45) has no cable\n", dev->name);
                         if (lp->auto_neg_cnf & IMM_BIT) /* check "ignore missing media" bit */
                                 result = DETECTED_RJ45H; /* Yes! I don't care if I see a link pulse */
                 }
+#else
+		result = DETECTED_RJ45H;
+#endif
 		break;
 	case A_CNF_MEDIA_AUI:
                 result = detect_aui(dev);
@@ -1504,6 +1577,13 @@ release_irq:
 #endif
                  );
         netif_start_queue(dev);
+#ifdef CONFIG_MACH_ME_LF1000
+        gpio_set_fn(ETHER_GPIO_PORT, ETHER_GPIO_PIN, 0);
+        gpio_set_pu(ETHER_GPIO_PORT, ETHER_GPIO_PIN, false);
+        gpio_set_int_mode(ETHER_GPIO_PORT, ETHER_GPIO_PIN, 
+			GPIO_IMODE_HIGH_LEVEL);
+	gpio_set_int(ETHER_GPIO_PORT, ETHER_GPIO_PIN, true);
+#endif
 	if (net_debug > 1)
 		printk("cs89x0: net_open() succeeded\n");
 	return 0;
@@ -1664,6 +1744,12 @@ static irqreturn_t net_interrupt(int irq, void *dev_id)
 			break;
 		}
 	}
+#if defined (CONFIG_MACH_ME_LF1000)
+	gpio_set_int_mode(ETHER_GPIO_PORT, ETHER_GPIO_PIN, 
+			GPIO_IMODE_HIGH_LEVEL);
+	gpio_set_int(ETHER_GPIO_PORT, ETHER_GPIO_PIN, true);
+	gpio_clear_pend(ETHER_GPIO_PORT, ETHER_GPIO_PIN);
+#endif
 	return IRQ_RETVAL(handled);
 }
 

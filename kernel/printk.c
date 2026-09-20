@@ -36,6 +36,8 @@
 
 #include <asm/uaccess.h>
 
+extern void printascii(char *);
+
 /*
  * Architectures can override it:
  */
@@ -50,7 +52,7 @@ void asmlinkage __attribute__((weak)) early_printk(const char *fmt, ...)
 
 /* We show everything that is MORE important than this.. */
 #define MINIMUM_CONSOLE_LOGLEVEL 1 /* Minimum loglevel we let people use */
-#define DEFAULT_CONSOLE_LOGLEVEL 7 /* anything MORE serious than KERN_DEBUG */
+#define DEFAULT_CONSOLE_LOGLEVEL 2 /* anything MORE serious than KERN_DEBUG */
 
 DECLARE_WAIT_QUEUE_HEAD(log_wait);
 
@@ -640,6 +642,7 @@ static int recursion_bug;
 static int new_text_line = 1;
 static char printk_buf[1024];
 
+
 asmlinkage int vprintk(const char *fmt, va_list args)
 {
 	int printed_len = 0;
@@ -686,6 +689,8 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
 
+	/* enable when debugging Linux boot code */
+	//printascii(printk_buf);
 
 	p = printk_buf;
 
