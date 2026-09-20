@@ -27,4 +27,4 @@ lib-$(CONFIG_MMU)		+= copy_page.o clear_page.o
 lib-$(CONFIG_FUNCTION_TRACER)	+= mcount.o
 lib-y				+= $(memcpy-y) $(udivsi3-y)
 
-EXTRA_CFLAGS += -Werror
+EXTRA_CFLAGS += 

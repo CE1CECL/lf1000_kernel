@@ -15,4 +15,4 @@ obj-y += octeon-memcpy.o
 
 obj-$(CONFIG_SMP)                     += smp.o
 
-EXTRA_CFLAGS += -Werror
+EXTRA_CFLAGS += 

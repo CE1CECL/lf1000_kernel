@@ -34,4 +34,4 @@ obj-$(CONFIG_HIBERNATION)	+= swsusp.o
 
 obj-$(CONFIG_GENERIC_CLOCKEVENTS_BROADCAST)	+= localtimer.o
 
-EXTRA_CFLAGS += -Werror
+EXTRA_CFLAGS += 

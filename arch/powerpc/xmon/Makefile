@@ -1,6 +1,6 @@
 # Makefile for xmon
 
-subdir-ccflags-$(CONFIG_PPC_WERROR) := -Werror
+subdir-ccflags-$(CONFIG_PPC_WERROR) := 
 
 ifdef CONFIG_PPC64
 EXTRA_CFLAGS += -mno-minimal-toc

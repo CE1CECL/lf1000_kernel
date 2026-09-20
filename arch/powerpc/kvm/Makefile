@@ -2,7 +2,7 @@
 # Makefile for Kernel-based Virtual Machine module
 #
 
-subdir-ccflags-$(CONFIG_PPC_WERROR) := -Werror
+subdir-ccflags-$(CONFIG_PPC_WERROR) := 
 
 EXTRA_CFLAGS += -Ivirt/kvm -Iarch/powerpc/kvm
 

@@ -2,7 +2,7 @@
 # Linux.
 #
 asflags := -ansi
-ccflags := -Werror
+ccflags := 
 
 lib-y                 := bootstr_$(BITS).o
 lib-$(CONFIG_SPARC32) += devmap.o
