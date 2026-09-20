@@ -21,7 +21,7 @@
 
 #if defined(CONFIG_DEBUG_ICEDCC)
 
-#ifdef CONFIG_CPU_V6
+#ifdef defined(CONFIG_CPU_V6) || defined(CONFIG_CPU_V7)
 		.macro	loadsp, rb
 		.endm
 		.macro	writeb, ch, rb
@@ -607,6 +607,8 @@ proc_types:
 @		b	__arm6_mmu_cache_off
 @		b	__armv3_mmu_cache_flush
 
+#if !defined(CONFIG_CPU_V7)
+		/* This collides with some V7 IDs, preventing correct detection */
 		.word	0x00000000		@ old ARM ID
 		.word	0x0000f000
 		mov	pc, lr
@@ -615,6 +617,7 @@ proc_types:
 
 		.word	0x41007000		@ ARM7/710
 		.word	0xfff8fe00
+#endif
 		b	__arm7_mmu_cache_off
 		b	__arm7_mmu_cache_off
 		mov	pc, lr
