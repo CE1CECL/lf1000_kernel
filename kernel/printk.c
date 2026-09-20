@@ -36,6 +36,8 @@
 
 #include <asm/uaccess.h>
 
+//extern void printascii(char *);
+
 /*
  * Architectures can override it:
  */
@@ -691,6 +693,7 @@ static int recursion_bug;
 static int new_text_line = 1;
 static char printk_buf[1024];
 
+
 asmlinkage int vprintk(const char *fmt, va_list args)
 {
 	int printed_len = 0;
@@ -739,6 +742,10 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 
 	/* enable when debugging Linux boot code */
 	//printascii(printk_buf);
+
+#ifdef	CONFIG_DEBUG_LL
+	printascii(printk_buf);
+#endif
 
 	p = printk_buf;
 
