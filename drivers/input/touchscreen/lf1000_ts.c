@@ -39,7 +39,7 @@
  * Most of the stuff inside #ifdef DEVCRITpm ... #endif brackets ought to be
  * removed before this code is released.
  */
-#define DEVCRITpm 1
+#undef DEVCRITpm
 
 #define TS_DEBOUNCE_DOWN 1	// default debounce down, min samples for down
 #define TS_DEBOUNCE_UP	 1	// default debounce up, min samples for up
