@@ -999,11 +999,6 @@ static int mes_sdio_probe(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "%s\n", __FUNCTION__);
 
-	if (!gpio_have_gpio_madrid()) {
-		dev_warn(&pdev->dev, "Not Madrid -- disabling MMC SD support\n");
-		return -ENODEV;
-	}
-
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
 		return -ENXIO;
